@@ -172,14 +172,9 @@ object CollectTest {
         implicitly[LinkVoidPoly.CollectCase[List[Node[T, T]], T => T]]
         implicitly[LinkVoidPoly.CollectCase[List[T => T], Node[T, T]]]
 
-        // ambiguous: Collect, Join
         fs |> g
-
         fs |> y
-
-        // ambiguous: Collect, Join
         xs |> g
-
         xs |> y
     }
 }
@@ -211,14 +206,9 @@ object CollectRTest {
         implicitly[LinkVoidPoly.CollectRCase[List[Node[T, Push[T]]], T => T]]
         implicitly[LinkVoidPoly.CollectRCase[List[Node[T, Push[T]]], Node[T, T]]]
 
-        // ambiguous: CollectR, Join
         fs |> g
-
         fs |> y
-
-        // ambiguous: CollectR, Join
         xs |> g
-
         xs |> y
     }
 }
@@ -385,7 +375,9 @@ object HSplitTest {
 
         val f = (x: Int) => 1 :: 3.0 :: HNil
 
-        val gs = (identity[Int] _) :: (identity[Double] _) :: HNil
+        val g0 = identity[Int] _
+        val g1 = identity[Double] _
+        val gs = g0 :: g1 :: HNil
 
         val x = new Node[Int, Int :: Double :: HNil] {
             def apply(x: Int) = f(x)
@@ -413,7 +405,9 @@ object HSplitRTest {
 
         val f = (x: Int) => Push(1) :: 3.0 :: HNil
 
-        val gs = (identity[Int] _) :: (identity[Double] _) :: HNil
+        val g0 = identity[Int] _
+        val g1 = identity[Double] _
+        val gs = g0 :: g1 :: HNil
 
         val x = new Node[Int, R[Int] :: R[Double] :: HNil] {
             def apply(x: Int) = f(x)
