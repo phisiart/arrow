@@ -24,4 +24,8 @@
 
 package arrow
 
-trait Node[-I, +O] extends (I => O)
+trait Node[I, O]
+
+trait In[I]
+
+trait Out[O]
