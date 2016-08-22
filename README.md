@@ -67,7 +67,7 @@ producers |> consumer
 
 ### HSplit
 ```scala
-import shapeless._
+import shapeless._ // for `HList`
 val producer: _ => (Int :: Double :: HNil)
 val consumers: (Int => _) :: (Double => _) :: HNil
 producer |> consumers
@@ -83,7 +83,7 @@ producers |> consumer
 
 ### HMatch
 ```scala
-import shapeless._ // for `HList`
+import shapeless._
 val producers: (_ => Int) :: (_ => Double) :: HNil
 val consumers: (Int => _) :: (Double => _) :: HNil
 produceres |> consumers
