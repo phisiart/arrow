@@ -56,7 +56,6 @@ object HSplitChainTest {
         val g0: Flow[Int => Int, Int => Int] = ((_: Int) + 1) |> ((_: Int) - 1)
         val g1: Flow[Double => Double, Double => Double] = ((_: Double) + 1.0) |> ((_: Double) - 1.0)
 
-        // Not Implemented
-        f |> (g0 :: g1 :: HNil)
+        f |> (g0 :: g1 :: HNil) |> (g0 :: g1 :: HNil)
     }
 }

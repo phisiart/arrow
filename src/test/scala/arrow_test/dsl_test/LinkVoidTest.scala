@@ -62,7 +62,7 @@ object OneToOneRTest {
         val graph = new ArrowGraph
         import graph._
 
-        val f = (x: Int) => Push(x + 1) //.asInstanceOf[R[Int]]
+        val f = (x: Int) => Push(x + 1)
 
         val g = (x: Int) => x - 1
 
@@ -134,10 +134,10 @@ object BroadcastRTest {
 
         val ys = List(x, x)
 
-        implicitly[LinkVoidPoly.BroadcastRCase[T => Push[T], Vector[T => T]]]
-        implicitly[LinkVoidPoly.BroadcastRCase[T => Push[T], Vector[Node[T, T]]]]
-        implicitly[LinkVoidPoly.BroadcastRCase[T => Push[T], Vector[T => T]]]
-        implicitly[LinkVoidPoly.BroadcastRCase[Node[T, Push[T]], Vector[Node[T, T]]]]
+        implicitly[LinkVoidPoly.BroadcastCase[T => Push[T], Vector[T => T]]]
+        implicitly[LinkVoidPoly.BroadcastCase[T => Push[T], Vector[Node[T, T]]]]
+        implicitly[LinkVoidPoly.BroadcastCase[T => Push[T], Vector[T => T]]]
+        implicitly[LinkVoidPoly.BroadcastCase[Node[T, Push[T]], Vector[Node[T, T]]]]
 
         f |> gs
         f |> ys
@@ -201,10 +201,10 @@ object CollectRTest {
             def apply(x: T) = g(x)
         }
 
-        implicitly[LinkVoidPoly.CollectRCase[List[T => Push[T]], T => T]]
-        implicitly[LinkVoidPoly.CollectRCase[List[T => Push[T]], Node[T, T]]]
-        implicitly[LinkVoidPoly.CollectRCase[List[Node[T, Push[T]]], T => T]]
-        implicitly[LinkVoidPoly.CollectRCase[List[Node[T, Push[T]]], Node[T, T]]]
+        implicitly[LinkVoidPoly.CollectCase[List[T => Push[T]], T => T]]
+        implicitly[LinkVoidPoly.CollectCase[List[T => Push[T]], Node[T, T]]]
+        implicitly[LinkVoidPoly.CollectCase[List[Node[T, Push[T]]], T => T]]
+        implicitly[LinkVoidPoly.CollectCase[List[Node[T, Push[T]]], Node[T, T]]]
 
         fs |> g
         fs |> y
@@ -253,7 +253,7 @@ object SplitRTest {
 
         type T = Int
 
-        val f = (x: T) => List(Push(x), Push(x))
+        val f = (x: T) => List(Push(x), Put(x))
 
         val g = identity[T] _
         val gs = Vector(g, g)
@@ -267,10 +267,10 @@ object SplitRTest {
         }
         val ys = Seq(y, y)
 
-        implicitly[LinkVoidPoly.SplitRCase[T => List[Push[T]], Vector[T => T]]]
-        implicitly[LinkVoidPoly.SplitRCase[T => List[Push[T]], Vector[Node[T, T]]]]
-        implicitly[LinkVoidPoly.SplitRCase[Node[T, List[Push[T]]], Vector[T => T]]]
-        implicitly[LinkVoidPoly.SplitRCase[Node[T, List[Push[T]]], Vector[Node[T, T]]]]
+        implicitly[LinkVoidPoly.SplitCase[T => List[Push[T]], Vector[T => T]]]
+        implicitly[LinkVoidPoly.SplitCase[T => List[Push[T]], Vector[Node[T, T]]]]
+        implicitly[LinkVoidPoly.SplitCase[Node[T, List[Push[T]]], Vector[T => T]]]
+        implicitly[LinkVoidPoly.SplitCase[Node[T, List[Push[T]]], Vector[Node[T, T]]]]
 
         f |> gs
         f |> ys
@@ -333,10 +333,10 @@ object JoinRTest {
             def apply(x: Vector[T]) = g(x)
         }
 
-        implicitly[LinkVoidPoly.JoinRCase[List[T => Push[T]], Vector[T] => T]]
-        implicitly[LinkVoidPoly.JoinRCase[List[Node[T, Push[T]]], Node[Vector[T], T]]]
-        implicitly[LinkVoidPoly.JoinRCase[List[T => Push[T]], Vector[T] => T]]
-        implicitly[LinkVoidPoly.JoinRCase[List[Node[T, Push[T]]], Node[Vector[T], T]]]
+        implicitly[LinkVoidPoly.JoinCase[List[T => Push[T]], Vector[T] => T]]
+        implicitly[LinkVoidPoly.JoinCase[List[Node[T, Push[T]]], Node[Vector[T], T]]]
+        implicitly[LinkVoidPoly.JoinCase[List[T => Push[T]], Vector[T] => T]]
+        implicitly[LinkVoidPoly.JoinCase[List[Node[T, Push[T]]], Node[Vector[T], T]]]
 
         fs |> g
         fs |> y

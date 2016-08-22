@@ -37,11 +37,6 @@ class ArrowGraph {
 
     final class Flow[L, R](val left: L, val right: R)
 
-//    implicit def FlowLinksObj[L, R, C]
-//    (implicit ev: LinkVoidPoly.Case[R, C])
-//    : LinkVoidPoly.Case[Flow[L, R], C]
-//    = new LinkV
-
     class InIsIn[I] extends (In[I] Inputs I) {
         def apply(c: In[I]): In[I] = c
     }
@@ -208,97 +203,69 @@ class ArrowGraph {
 
         abstract class BroadcastCase[P, Cs] extends Case[P, Cs]
 
-        implicit def Broadcast[M, P, S[_] <: Seq[_], C]
-        (implicit ev1: (P Outputs M), ev2: (C Inputs M)): BroadcastCase[P, S[C]]
-        = new BroadcastCase[P, S[C]] {
-            def apply(producer: P, consumers: S[C]) {
+        implicit def Broadcast[P, Cs, C]
+        (implicit
+         cs: Cs <:< Seq[C],
+         link: LinkPoly.Case[P, C]
+        ): BroadcastCase[P, Cs]
+        = new BroadcastCase[P, Cs] {
+            def apply(producer: P, consumers: Cs) {
                 DEBUG("[Broadcast]")
-                ev1(producer)
-                consumers.asInstanceOf[Seq[C]].map(ev2.apply)
-            }
-        }
-
-        abstract class BroadcastRCase[P, Cs] extends Case[P, Cs]
-
-        implicit def BroadcastR[M, _R[_] <: R[_], P, S[_] <: Seq[_], C]
-        (implicit ev1: (P Outputs _R[M]), ev2: (C Inputs M)): BroadcastRCase[P, S[C]]
-        = new BroadcastRCase[P, S[C]] {
-            def apply(producer: P, consumers: S[C]) {
-                DEBUG("[BroadcastR]")
-                ev1(producer)
-                consumers.asInstanceOf[Seq[C]].map(ev2.apply)
+                consumers.asInstanceOf[Seq[C]].map(consumer => {
+                    link.apply(producer, consumer)
+                })
             }
         }
 
         abstract class CollectCase[Ps, C] extends Case[Ps, C]
 
-        implicit def Collect[M, S[_] <: Seq[_], P, C]
-        (implicit ev1: (P Outputs M), ev2: (C Inputs M)): CollectCase[S[P], C]
-        = new CollectCase[S[P], C] {
-            def apply(producers: S[P], consumer: C) {
+        implicit def Collect[Ps, P, C]
+        (implicit
+         ps: Ps <:< Seq[P], // Fix P
+         link: LinkPoly.Case[P, C]
+        ): CollectCase[Ps, C]
+        = new CollectCase[Ps, C] {
+            def apply(producers: Ps, consumer: C) {
                 DEBUG("[Collect]")
-                producers.asInstanceOf[Seq[P]].map(ev1.apply)
-                ev2(consumer)
-            }
-        }
 
-        abstract class CollectRCase[Ps, C] extends Case[Ps, C]
+                ps.apply(producers).map(producer => {
+                    link(producer, consumer)
+                })
 
-        implicit def CollectR[M, _R[_] <: R[_], S[_] <: Seq[_], P, C]
-        (implicit ev1: (P Outputs _R[M]), ev2: (C Inputs M)): CollectRCase[S[P], C]
-        = new CollectRCase[S[P], C] {
-            def apply(producers: S[P], consumer: C) {
-                DEBUG("[CollectR]")
-                producers.asInstanceOf[Seq[P]].map(ev1.apply)
-                ev2(consumer)
             }
         }
 
         abstract class SplitCase[P, Cs] extends Case[P, Cs]
 
-        implicit def Split[M, S1[_] <: Seq[_], P, S2[_] <: Seq[_], C]
-        (implicit ev1: (P Outputs S1[M]), ev2: (C Inputs M)): SplitCase[P, S2[C]]
-        = new SplitCase[P, S2[C]] {
-            def apply(producer: P, consumers: S2[C]) {
+        implicit def Split[Os, O, P, I, C, Cs]
+        (implicit
+         out: (P Outputs Os), // Fix Os
+         ms: Os <:< Seq[O], // Fix O
+         cs: Cs <:< Seq[C], // Fix C
+         link: LinkPoly.Case[Out[O], C]
+        ): SplitCase[P, Cs]
+        = new SplitCase[P, Cs] {
+            def apply(producer: P, consumers: Cs) {
                 DEBUG("[Split]")
-                ev1(producer)
-                consumers.asInstanceOf[Seq[C]].map(ev2.apply)
-            }
-        }
-
-        abstract class SplitRCase[P, Cs] extends Case[P, Cs]
-
-        implicit def SplitR[M, _R[_] <: R[_], S1[_] <: Seq[_], P, S2[_] <: Seq[_], C]
-        (implicit ev1: (P Outputs S1[_R[M]]), ev2: (C Inputs M)): SplitRCase[P, S2[C]]
-        = new SplitRCase[P, S2[C]] {
-            def apply(producer: P, consumers: S2[C]) {
-                DEBUG("[SplitR]")
-                ev1(producer)
-                consumers.asInstanceOf[Seq[C]].map(ev2.apply)
+                out(producer)
+                consumers.asInstanceOf[Seq[C]] // TODO: one by one
             }
         }
 
         abstract class JoinCase[Ps, C] extends Case[Ps, C]
 
-        implicit def Join[M, S1[_] <: Seq[_], P, S2[_] <: Seq[_], C]
-        (implicit ev1: (P Outputs M), ev2: (C Inputs S2[M])): JoinCase[S1[P], C]
-        = new JoinCase[S1[P], C] {
-            def apply(producers: S1[P], consumer: C) {
+        implicit def Join[Ps, P, O, Is, I, C]
+        (implicit
+         ps: Ps <:< Seq[P], // Fix P
+         in: (C Inputs Is), // Fix Is
+         is: Is <:< Seq[I], // Fix I
+         link: LinkPoly.Case[P, In[I]]
+        ): JoinCase[Ps, C]
+        = new JoinCase[Ps, C] {
+            def apply(producers: Ps, consumer: C) {
                 DEBUG("[Join]")
-                producers.asInstanceOf[Seq[P]].map(ev1.apply)
-                ev2(consumer)
-            }
-        }
-
-        abstract class JoinRCase[Ps, C] extends Case[Ps, C]
-
-        implicit def JoinR[M, _R[_] <: R[_], S1[_] <: Seq[_], P, S2[_] <: Seq[_], C]
-        (implicit ev1: (P Outputs _R[M]), ev2: (C Inputs S2[M])): JoinRCase[S1[P], C]
-        = new JoinRCase[S1[P], C] {
-            def apply(producers: S1[P], consumer: C) {
-                DEBUG("[JoinR]")
-                producers.asInstanceOf[Seq[P]].map(ev1.apply)
-                ev2(consumer)
+                producers.asInstanceOf[Seq[P]] // TODO: one by one
+                in(consumer)
             }
         }
 
@@ -306,42 +273,29 @@ class ArrowGraph {
 
         // Out[HNil] |> HNil
         implicit def HSplitNil[M <: HNil, P, Cs <: HNil]
-        (implicit ev1: (P Outputs M)): HSplitCase[P, Cs]
+        (implicit out: (P Outputs M)): HSplitCase[P, Cs]
         = new HSplitCase[P, Cs] {
             def apply(producer: P, consumers: Cs) {
                 DEBUG("[HSplitNil]")
-                ev1(producer)
+                out(producer)
             }
         }
 
-        // Out[MH :: MT] |> In[MH] :: CT
-        // Requires Out[MT] |> CT
-//        implicit def HSplit[P, M <: HList, MH, MT <: HList, Cs <: HList, CH, CT <: HList]
-//        (implicit ev1: (P Outputs M), ev0: M <:< (MH :: MT), cs: Cs <:< (CH :: CT), ev2: (CH Inputs MH), tail: HSplitCase[Out[MT], CT]): HSplitCase[P, Cs]
-//        = new HSplitCase[P, Cs] {
-//            def apply(producer: P, consumers: Cs) {
-//                DEBUG("[HSplit]")
-//                ev1(producer)
-//            }
-//        }
-
-        implicit def HSplit[P, M <: HList, MH, MT <: HList, Cs <: HList, CH, CT <: HList]
-        (implicit ev1: (P Outputs M), ev0: M <:< (MH :: MT), cs: Cs <:< (CH :: CT), head: LinkPoly.Case[Out[MH], CH], tail: LinkPoly.Case[Out[MT], CT]): HSplitCase[P, Cs]
+        // Out[A :: B :: HNil] |> (In[A] :: In[B] :: HNil)
+        implicit def HSplit[P, Os <: HList, OH, OT <: HList, Cs <: HList, CH, CT <: HList]
+        (implicit
+         ev1: (P Outputs Os), // Fix Os
+         ev0: Os <:< (OH :: OT), // Fix OH & OT
+         cs: Cs <:< (CH :: CT), // Fix CH & CT
+         linkHead: LinkPoly.Case[Out[OH], CH],
+         linkTail: LinkPoly.Case[Out[OT], CT]
+        ): HSplitCase[P, Cs]
         = new HSplitCase[P, Cs] {
             def apply(producer: P, consumers: Cs) {
                 DEBUG("[HSplit]")
                 ev1(producer)
             }
         }
-
-//        implicit def HSplitR[P, M <: HList, _R[_] <: R[_], MH, MT <: HList, Cs <: HList, CH, CT <: HList]
-//        (implicit ev1: (P Outputs M), ev0: M <:< (_R[MH] :: MT), cs: Cs <:< (CH :: CT), ev2: (CH Inputs MH), tail: HSplitCase[Out[MT], CT]): HSplitCase[P, Cs]
-//        = new HSplitCase[P, Cs] {
-//            def apply(producer: P, consumers: Cs) {
-//                DEBUG("[HSplitR]")
-//                ev1(producer)
-//            }
-//        }
 
         abstract class HJoinCase[Ps <: HList, C] extends Case[Ps, C]
 
@@ -353,29 +307,19 @@ class ArrowGraph {
             }
         }
 
-//        implicit def HJoin[Ps <: HList, PH, PT <: HList, M <: HList, MH, MT <: HList, C]
-//        (implicit ev1: (C Inputs M), ev2: M <:< (MH :: MT), ps:  Ps <:< (PH :: PT), ev3: (PH Outputs MH), tail: HJoinCase[PT, In[MT]]): HJoinCase[Ps, C]
-//        = new HJoinCase[Ps, C] {
-//            def apply(producers: Ps, consumer: C) {
-//                DEBUG("[HJoin]")
-//            }
-//        }
-
         implicit def HJoin[Ps <: HList, PH, PT <: HList, M <: HList, MH, MT <: HList, C]
-        (implicit ev1: (C Inputs M), ev2: M <:< (MH :: MT), ps: Ps <:< (PH :: PT), head: LinkPoly.Case[PH, In[MH]], tail: LinkPoly.Case[PT, In[MT]]): HJoinCase[Ps, C]
+        (implicit
+         in: (C Inputs M),
+         ev2: M <:< (MH :: MT),
+         ps: Ps <:< (PH :: PT),
+         linkHead: LinkPoly.Case[PH, In[MH]],
+         linkTail: LinkPoly.Case[PT, In[MT]]
+        ): HJoinCase[Ps, C]
         = new HJoinCase[Ps, C] {
             def apply(producers: Ps, consumer: C) {
                 DEBUG("[HJoin]")
             }
         }
-
-//        implicit def HJoinR[Ps <: HList, PH, PT <: HList, M <: HList, _R[_] <: R[_], MH, MT <: HList, C]
-//        (implicit ev1: (C Inputs M), ev2: M <:< (MH :: MT), ps:  Ps <:< (PH :: PT), ev3: (PH Outputs _R[MH]), tail: HJoinCase[PT, In[MT]]): HJoinCase[Ps, C]
-//        = new HJoinCase[Ps, C] {
-//            def apply(producers: Ps, consumer: C) {
-//                DEBUG("[HJoinR]")
-//            }
-//        }
 
         abstract class HMatchCase[Ps <: HList, Cs <: HList] extends Case[Ps, Cs]
 
@@ -386,13 +330,16 @@ class ArrowGraph {
             }
         }
 
-        implicit def HMatch[Ps <: HList, PH, PT <: HList, Cs <: HList, CH, CT <: HList]
-        (implicit ps: Ps <:< (PH :: PT), cs: Cs <:< (CH :: CT), ev1: Case[PH, CH], ev2: Case[PT, CT]): HMatchCase[Ps, Cs]
-        = new HMatchCase[Ps, Cs] {
-            def apply(producers: Ps, consumers: Cs) {
+        implicit def HMatch[PH, PT <: HList, CH, CT <: HList]
+        (implicit
+         linkHead: LinkPoly.Case[PH, CH],
+         linkTail: LinkPoly.Case[PT, CT]
+        ): HMatchCase[PH :: PT, CH :: CT]
+        = new HMatchCase[PH :: PT, CH :: CT] {
+            def apply(producers: PH :: PT, consumers: CH :: CT) {
                 DEBUG("[HMatch]")
-                ev1.apply(producers.head, consumers.head)
-                ev2.apply(producers.tail, consumers.tail)
+                linkHead.apply(producers.head, consumers.head)
+                linkTail.apply(producers.tail, consumers.tail)
             }
         }
 
