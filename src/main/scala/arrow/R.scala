@@ -27,6 +27,6 @@ package arrow
 sealed trait R[T]
 final case class Push[T](value: T) extends R[T]
 final case class Put[T](value: T) extends R[T]
-final case class Fin[T]() extends R[T]
+final case class Finish[T]() extends R[T]
 final case class Empty[T]() extends R[T]
 final case class Break[T]() extends R[T]

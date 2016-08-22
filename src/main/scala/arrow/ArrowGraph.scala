@@ -35,6 +35,13 @@ class ArrowGraph {
         def apply(c: C): In[I]
     }
 
+    final class Flow[L, R](val left: L, val right: R)
+
+//    implicit def FlowLinksObj[L, R, C]
+//    (implicit ev: LinkVoidPoly.Case[R, C])
+//    : LinkVoidPoly.Case[Flow[L, R], C]
+//    = new LinkV
+
     class InIsIn[I] extends (In[I] Inputs I) {
         def apply(c: In[I]): In[I] = c
     }
@@ -99,12 +106,74 @@ class ArrowGraph {
 
 
     case class LinkableWrapper[P](linkable: P) {
-        def |>[C](consumer: C)(implicit linkVoidPoly: LinkVoidPoly.Case[P, C]) = {
+        def |>[C](consumer: C)(implicit linkVoidPoly: LinkPoly.Case[P, C]) = {
             linkVoidPoly.apply(this.linkable, consumer)
         }
     }
 
-    implicit def GenLinkableWrapper[T](linkable: T): LinkableWrapper[T] = LinkableWrapper(linkable)
+    implicit def GenLinkableWrapper[T](linkable: T): LinkableWrapper[T] =
+        LinkableWrapper(linkable)
+
+    object LinkPoly {
+        def DEBUG(x: Any) = println(x)
+
+        abstract class Case[A, B] {
+            type R
+            def apply(a: A, b: B): R
+        }
+
+        type CaseAux[A, B, _R] = Case[A, B] { type R = _R }
+
+        implicit def RawCase[A, B]
+        (implicit ev: LinkVoidPoly.Case[A, B])
+        : CaseAux[A, B, Flow[A, B]]
+        = {
+            new Case[A, B] {
+                type R = Flow[A, B]
+
+                def apply(a: A, b: B): Flow[A, B] = {
+                    ev.apply(a, b)
+                    new Flow(a, b)
+                }
+            }
+        }
+
+        implicit def FlowLinksRawCase[AL, AR, B]
+        (implicit ev: LinkVoidPoly.Case[AR, B])
+        : CaseAux[Flow[AL, AR], B, Flow[AL, B]]
+        = new Case[Flow[AL, AR], B] {
+            type R = Flow[AL, B]
+
+            def apply(a: Flow[AL, AR], b: B): Flow[AL, B] = {
+                ev.apply(a.right, b)
+                new Flow(a.left, b)
+            }
+        }
+
+        implicit def RawLinksFlowCase[A, BL, BR]
+        (implicit ev: LinkVoidPoly.Case[A, BL])
+        : CaseAux[A, Flow[BL, BR], Flow[A, BR]]
+        = new Case[A, Flow[BL, BR]] {
+            type R = Flow[A, BR]
+
+            def apply(a: A, b: Flow[BL, BR]): Flow[A, BR] = {
+                ev.apply(a, b.left)
+                new Flow(a, b.right)
+            }
+        }
+
+        implicit def FlowLinksFlowCase[AL, AR, BL, BR]
+        (implicit ev: LinkVoidPoly.Case[AR, BL])
+        : CaseAux[Flow[AL, AR], Flow[BL, BR], Flow[AL, BR]]
+        = new Case[Flow[AL, AR], Flow[BL, BR]] {
+            type R = Flow[AL, BR]
+
+            def apply(a: Flow[AL, AR], b: Flow[BL, BR]): Flow[AL, BR] = {
+                ev.apply(a.right, b.left)
+                new Flow(a.left, b.right)
+            }
+        }
+    }
 
     object LinkVoidPoly {
         def DEBUG(x: Any) = println(x)
@@ -127,13 +196,13 @@ class ArrowGraph {
 
         abstract class OneToOneRCase[P, C] extends Case[P, C]
 
-        implicit def OneToOneR[M, R_[_] <: R[_], P, C]
-        (implicit ev1: (P Outputs R_[M]), ev2: (C Inputs M)): OneToOneRCase[P, C]
+        implicit def OneToOneR[M, RM, P, C]
+        (implicit in: (C Inputs M), out: (P Outputs RM), rm: RM <:< R[M]): OneToOneRCase[P, C]
         = new OneToOneRCase[P, C] {
             def apply(producer: P, consumer: C) {
                 DEBUG("[OneToOneR]")
-                ev1(producer)
-                ev2(consumer)
+                out(producer)
+                in(consumer)
             }
         }
 
@@ -247,8 +316,17 @@ class ArrowGraph {
 
         // Out[MH :: MT] |> In[MH] :: CT
         // Requires Out[MT] |> CT
+//        implicit def HSplit[P, M <: HList, MH, MT <: HList, Cs <: HList, CH, CT <: HList]
+//        (implicit ev1: (P Outputs M), ev0: M <:< (MH :: MT), cs: Cs <:< (CH :: CT), ev2: (CH Inputs MH), tail: HSplitCase[Out[MT], CT]): HSplitCase[P, Cs]
+//        = new HSplitCase[P, Cs] {
+//            def apply(producer: P, consumers: Cs) {
+//                DEBUG("[HSplit]")
+//                ev1(producer)
+//            }
+//        }
+
         implicit def HSplit[P, M <: HList, MH, MT <: HList, Cs <: HList, CH, CT <: HList]
-        (implicit ev1: (P Outputs M), ev0: M <:< (MH :: MT), cs: Cs <:< (CH :: CT), ev2: (CH Inputs MH), tail: HSplitCase[Out[MT], CT]): HSplitCase[P, Cs]
+        (implicit ev1: (P Outputs M), ev0: M <:< (MH :: MT), cs: Cs <:< (CH :: CT), head: LinkPoly.Case[Out[MH], CH], tail: LinkPoly.Case[Out[MT], CT]): HSplitCase[P, Cs]
         = new HSplitCase[P, Cs] {
             def apply(producer: P, consumers: Cs) {
                 DEBUG("[HSplit]")
@@ -256,16 +334,14 @@ class ArrowGraph {
             }
         }
 
-
-        implicit def HSplitR[P, M <: HList, _R[_] <: R[_], MH, MT <: HList, Cs <: HList, CH, CT <: HList]
-        (implicit ev1: (P Outputs M), ev0: M <:< (_R[MH] :: MT), cs: Cs <:< (CH :: CT), ev2: (CH Inputs MH), tail: HSplitCase[Out[MT], CT]): HSplitCase[P, Cs]
-        = new HSplitCase[P, Cs] {
-            def apply(producer: P, consumers: Cs) {
-                DEBUG("[HSplitR]")
-                ev1(producer)
-            }
-        }
-
+//        implicit def HSplitR[P, M <: HList, _R[_] <: R[_], MH, MT <: HList, Cs <: HList, CH, CT <: HList]
+//        (implicit ev1: (P Outputs M), ev0: M <:< (_R[MH] :: MT), cs: Cs <:< (CH :: CT), ev2: (CH Inputs MH), tail: HSplitCase[Out[MT], CT]): HSplitCase[P, Cs]
+//        = new HSplitCase[P, Cs] {
+//            def apply(producer: P, consumers: Cs) {
+//                DEBUG("[HSplitR]")
+//                ev1(producer)
+//            }
+//        }
 
         abstract class HJoinCase[Ps <: HList, C] extends Case[Ps, C]
 
@@ -277,20 +353,46 @@ class ArrowGraph {
             }
         }
 
+//        implicit def HJoin[Ps <: HList, PH, PT <: HList, M <: HList, MH, MT <: HList, C]
+//        (implicit ev1: (C Inputs M), ev2: M <:< (MH :: MT), ps:  Ps <:< (PH :: PT), ev3: (PH Outputs MH), tail: HJoinCase[PT, In[MT]]): HJoinCase[Ps, C]
+//        = new HJoinCase[Ps, C] {
+//            def apply(producers: Ps, consumer: C) {
+//                DEBUG("[HJoin]")
+//            }
+//        }
+
         implicit def HJoin[Ps <: HList, PH, PT <: HList, M <: HList, MH, MT <: HList, C]
-        (implicit ev1: (C Inputs M), ev2: M <:< (MH :: MT), ps:  Ps <:< (PH :: PT), ev3: (PH Outputs MH), tail: HJoinCase[PT, In[MT]]): HJoinCase[Ps, C]
+        (implicit ev1: (C Inputs M), ev2: M <:< (MH :: MT), ps: Ps <:< (PH :: PT), head: LinkPoly.Case[PH, In[MH]], tail: LinkPoly.Case[PT, In[MT]]): HJoinCase[Ps, C]
         = new HJoinCase[Ps, C] {
             def apply(producers: Ps, consumer: C) {
                 DEBUG("[HJoin]")
             }
         }
 
+//        implicit def HJoinR[Ps <: HList, PH, PT <: HList, M <: HList, _R[_] <: R[_], MH, MT <: HList, C]
+//        (implicit ev1: (C Inputs M), ev2: M <:< (MH :: MT), ps:  Ps <:< (PH :: PT), ev3: (PH Outputs _R[MH]), tail: HJoinCase[PT, In[MT]]): HJoinCase[Ps, C]
+//        = new HJoinCase[Ps, C] {
+//            def apply(producers: Ps, consumer: C) {
+//                DEBUG("[HJoinR]")
+//            }
+//        }
 
-        implicit def HJoinR[Ps <: HList, PH, PT <: HList, M <: HList, _R[_] <: R[_], MH, MT <: HList, C]
-        (implicit ev1: (C Inputs M), ev2: M <:< (MH :: MT), ps:  Ps <:< (PH :: PT), ev3: (PH Outputs _R[MH]), tail: HJoinCase[PT, In[MT]]): HJoinCase[Ps, C]
-        = new HJoinCase[Ps, C] {
-            def apply(producers: Ps, consumer: C) {
-                DEBUG("[HJoinR]")
+        abstract class HMatchCase[Ps <: HList, Cs <: HList] extends Case[Ps, Cs]
+
+        implicit def HMatchNil[Ps <: HNil, Cs <: HNil]
+        = new HMatchCase[Ps, Cs] {
+            def apply(producers: Ps, consumers: Cs) {
+                DEBUG("[HMatchNil]")
+            }
+        }
+
+        implicit def HMatch[Ps <: HList, PH, PT <: HList, Cs <: HList, CH, CT <: HList]
+        (implicit ps: Ps <:< (PH :: PT), cs: Cs <:< (CH :: CT), ev1: Case[PH, CH], ev2: Case[PT, CT]): HMatchCase[Ps, Cs]
+        = new HMatchCase[Ps, Cs] {
+            def apply(producers: Ps, consumers: Cs) {
+                DEBUG("[HMatch]")
+                ev1.apply(producers.head, consumers.head)
+                ev2.apply(producers.tail, consumers.tail)
             }
         }
 

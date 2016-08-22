@@ -361,6 +361,9 @@ object HSplitNilTest {
 
         val ys = HNil
 
+        implicitly[LinkVoidPoly.HSplitCase[T => HNil, HNil]]
+        implicitly[LinkVoidPoly.HSplitCase[Node[T, HNil], HNil]]
+
         f |> gs
         f |> ys
         x |> gs
@@ -390,6 +393,11 @@ object HSplitTest {
             def apply(x: Double) = x
         }
         val ys = y0 :: y1 :: HNil
+
+        implicitly[LinkVoidPoly.HSplitCase[Int => (Int :: Double :: HNil), (Int => Int) :: (Double => Double) :: HNil]]
+        implicitly[LinkVoidPoly.HSplitCase[Node[Int, Int :: Double :: HNil], Node[Int, Int] :: Node[Double, Double] :: HNil]]
+        implicitly[LinkVoidPoly.HSplitCase[Int => (Int :: Double :: HNil), (Int => Int) :: (Double => Double) :: HNil]]
+        implicitly[LinkVoidPoly.HSplitCase[Node[Int, Int :: Double :: HNil], Node[Int, Int] :: Node[Double, Double] :: HNil]]
 
         f |> gs
         f |> ys
@@ -421,6 +429,11 @@ object HSplitRTest {
         }
         val ys = y0 :: y1 :: HNil
 
+        implicitly[LinkVoidPoly.HSplitCase[Int => (R[Int] :: Double :: HNil), (Int => Int) :: (Double => Double) :: HNil]]
+        implicitly[LinkVoidPoly.HSplitCase[Int => (R[Int] :: Double :: HNil), Node[Int, Int] :: Node[Double, Double] :: HNil]]
+        implicitly[LinkVoidPoly.HSplitCase[Int => (R[Int] :: Double :: HNil), (Int => Int) :: (Double => Double) :: HNil]]
+        implicitly[LinkVoidPoly.HSplitCase[Node[Int, R[Int] :: Double :: HNil], Node[Int, Int] :: Node[Double, Double] :: HNil]]
+
         f |> gs
         f |> ys
         x |> gs
@@ -442,6 +455,9 @@ object HJoinNil {
         val y = new Node[HNil, HNil] {
             def apply(x: HNil) = g(x)
         }
+
+        implicitly[LinkVoidPoly.HJoinCase[HNil, HNil => HNil]]
+        implicitly[LinkVoidPoly.HJoinCase[HNil, Node[HNil, HNil]]]
 
         fs |> g
         fs |> y
@@ -469,6 +485,11 @@ object HJoin {
             def apply(x: Int :: HNil) = g(x)
         }
 
+        implicitly[LinkVoidPoly.HJoinCase[(Int => Int) :: HNil, (Int :: HNil) => Int]]
+        implicitly[LinkVoidPoly.HJoinCase[(Int => Int) :: HNil, Node[Int :: HNil, Int]]]
+        implicitly[LinkVoidPoly.HJoinCase[Node[Int, Int] :: HNil, (Int :: HNil) => Int]]
+        implicitly[LinkVoidPoly.HJoinCase[Node[Int, Int] :: HNil, Node[Int :: HNil, Int]]]
+
         fs |> g
         fs |> y
         xs |> g
@@ -495,9 +516,69 @@ object HJoinR {
             def apply(x: Int :: HNil) = g(x)
         }
 
+        implicitly[LinkVoidPoly.HJoinCase[(Int => R[Int]) :: HNil, (Int :: HNil) => Int]]
+        implicitly[LinkVoidPoly.HJoinCase[(Int => R[Int]) :: HNil, Node[Int :: HNil, Int]]]
+        implicitly[LinkVoidPoly.HJoinCase[Node[Int, R[Int]] :: HNil, (Int :: HNil) => Int]]
+        implicitly[LinkVoidPoly.HJoinCase[Node[Int, R[Int]] :: HNil, Node[Int :: HNil, Int]]]
+
         fs |> g
         fs |> y
         xs |> g
         xs |> y
+    }
+}
+
+object HMatchNilTest {
+    def main(args: Array[String]) {
+        val graph = new ArrowGraph
+        import graph._
+
+        val fs = HNil
+        val gs = HNil
+
+        implicitly[LinkVoidPoly.HMatchCase[HNil, HNil]]
+
+        fs |> gs
+    }
+}
+
+object HMatchTest {
+    def main(args: Array[String]) {
+        val graph = new ArrowGraph
+        import graph._
+
+        val f0 = (x: Int) => x
+        val f1 = (x: Double) => x
+        val fs = f0 :: f1 :: HNil
+
+        val g0 = (x: Int) => x
+        val g1 = (x: Double) => x
+        val gs = g0 :: g1 :: HNil
+
+        val x0 = new Node[Int, Int] {
+            def apply(x: Int) = f0(x)
+        }
+        val x1 = new Node[Double, Double] {
+            def apply(x: Double) = f1(x)
+        }
+        val xs = x0 :: x1 :: HNil
+
+        val y0 = new Node[Int, Int] {
+            def apply(x: Int) = g0(x)
+        }
+        val y1 = new Node[Double, Double] {
+            def apply(x: Double) = g1(x)
+        }
+        val ys = y0 :: y1 :: HNil
+
+        implicitly[LinkVoidPoly.HMatchCase[(Int => Int) :: (Double => Double) :: HNil, (Int => Int) :: (Double => Double) :: HNil]]
+        implicitly[LinkVoidPoly.HMatchCase[(Int => Int) :: (Double => Double) :: HNil, Node[Int, Int] :: Node[Double, Double] :: HNil]]
+        implicitly[LinkVoidPoly.HMatchCase[Node[Int, Int] :: Node[Double, Double] :: HNil, (Int => Int) :: (Double => Double) :: HNil]]
+        implicitly[LinkVoidPoly.HMatchCase[Node[Int, Int] :: Node[Double, Double] :: HNil, Node[Int, Int] :: Node[Double, Double] :: HNil]]
+
+        fs |> gs
+        fs |> ys
+        xs |> gs
+        xs |> ys
     }
 }
