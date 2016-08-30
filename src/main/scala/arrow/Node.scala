@@ -24,8 +24,99 @@
 
 package arrow
 
-trait Node[I, O]
+import shapeless._
 
-trait In[I]
+trait NodeUntyped
 
-trait Out[O]
+trait Node[I, O] extends NodeUntyped
+
+case class FunctionNode[I, O](func: I => O) extends Node[I, O]
+
+trait InUntyped
+
+trait In[I] extends InUntyped
+
+// NodeIn
+trait NodeInUntyped {
+    val node: NodeUntyped
+
+    override def toString = s"<${node.hashCode()}>"
+}
+
+class NodeIn[I, O](val node: Node[I, O]) extends In[I] with NodeInUntyped
+
+// InHd
+trait InHdUntyped extends InUntyped {
+    val in: InUntyped
+
+    override def toString = s"$in.hd"
+}
+
+class InHd[IH, I <: HList](val in: In[I])
+    extends In[IH] with InHdUntyped
+
+// InTl
+trait InTlUntyped extends InUntyped {
+    val in: InUntyped
+
+    override def toString = s"$in.tl"
+}
+
+class InTl[IT <: HList, I <: HList](val in: In[I])
+    extends In[IT] with InTlUntyped
+
+/** [[InList]] */
+trait InListUnTyped extends InUntyped {
+    val in: InUntyped
+    val id: Int
+
+    override def toString = s"$in[$id]"
+}
+
+class InList[I, Is](val in: In[Is], val id: Int)
+    extends In[I] with InListUnTyped
+
+trait OutUntyped
+
+trait Out[O] extends OutUntyped
+
+/** [[NodeOut]] */
+trait NodeOutUntyped {
+    val node: NodeUntyped
+
+    override def toString = s"<${node.hashCode()}>"
+}
+
+class NodeOut[I, O](val node: Node[I, O])
+    extends Out[O] with NodeOutUntyped
+
+/** [[OutHd]] */
+trait OutHdUntyped {
+    val out: OutUntyped
+
+    override def toString = s"$out.hd"
+}
+
+class OutHd[OH, O <: HList](val out: Out[O])
+    extends Out[OH] with OutHdUntyped
+
+/** [[OutTl]] */
+trait OutTlUntyped {
+    val out: OutUntyped
+
+    override def toString = s"$out.tl"
+}
+
+class OutTl[OT <: HList, O <: HList](val out: Out[O])
+    extends Out[OT] with OutTlUntyped
+
+/** [[OutList]] */
+trait OutListUntyped {
+    val out: OutUntyped
+    val id: Int
+
+    override def toString = s"$out[$id]"
+}
+
+class OutList[O, Os](val out: Out[Os], val id: Int)
+    extends Out[O] with OutListUntyped

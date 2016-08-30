@@ -24,14 +24,19 @@
 
 package arrow
 
+import arrow.repr._
 import shapeless._
 
 class ArrowGraph {
+    val repr = new Repr
+
     abstract class Outputs[P, O] {
+        // TODO: should I perform a lookup?
         def apply(p: P): Out[O]
     }
 
     abstract class Inputs[C, I] {
+        // TODO: should I perform a lookup?
         def apply(c: C): In[I]
     }
 
@@ -55,8 +60,11 @@ class ArrowGraph {
         def apply(c: I => O): In[I] = {
             println("FunctionToIn")
 
-            // TODO: implement this
-            null
+            // TODO: should I create a node every time?
+            val node = FunctionNode(c)
+            repr.insertNode(node)
+
+            new NodeIn[I, O](node)
         }
     }
 
@@ -67,8 +75,11 @@ class ArrowGraph {
         def apply(p: I => O): Out[O] = {
             println("FunctionToOut")
 
-            // TODO: implement this
-            null
+            // TODO: should I create a node every time?
+            val node = FunctionNode(p)
+            repr.insertNode(node)
+
+            new NodeOut[I, O](node)
         }
     }
 
@@ -79,8 +90,9 @@ class ArrowGraph {
         def apply(c: N): In[I] = {
             println("NodeIsIn")
 
-            // TODO: implement this
-            null
+            val node = n(c)
+            repr.insertNode(node)
+            new NodeIn[I, O](node)
         }
     }
 
@@ -94,8 +106,9 @@ class ArrowGraph {
         def apply(p: N): Out[O] = {
             println("NodeIsOut")
 
-            // TODO: implement this
-            null
+            val node = n(p)
+            repr.insertNode(node)
+            new NodeOut[I, O](node)
         }
     }
 
@@ -205,15 +218,17 @@ class ArrowGraph {
 
         implicit def OneToOne[M, P, C]
         (implicit
-         out: (P Outputs M),
-         in: (C Inputs M)
+         genOut: (P Outputs M),
+         genIn: (C Inputs M)
         ): OneToOneCase[P, C]
         = new OneToOneCase[P, C] {
             def apply(producer: P, consumer: C) {
                 DEBUG("[OneToOne]")
 
-                out(producer)
-                in(consumer)
+                val out = genOut(producer)
+                val in = genIn(consumer)
+                val subscription = new repr.SubscriptionImpl[M](out, in)
+                repr.insertSubscription(subscription)
             }
         }
 
@@ -222,16 +237,18 @@ class ArrowGraph {
 
         implicit def OneToOneR[M, RM, P, C]
         (implicit
-         in: (C Inputs M),
-         out: (P Outputs RM),
+         genIn: (C Inputs M),
+         genOut: (P Outputs RM),
          rm: RM <:< R[M]
         ): OneToOneRCase[P, C]
         = new OneToOneRCase[P, C] {
             def apply(producer: P, consumer: C) {
                 DEBUG("[OneToOneR]")
 
-                out(producer)
-                in(consumer)
+                val out = genOut(producer)
+                val in = genIn(consumer)
+                val subscription = new repr.SubscriptionRImpl[RM, M](out, in)
+                repr.insertSubscription(subscription)
             }
         }
 
@@ -276,7 +293,7 @@ class ArrowGraph {
 
         implicit def Split[Os, O, P, I, C, Cs]
         (implicit
-         out: (P Outputs Os), // Fix Os
+         genOut: (P Outputs Os), // Fix Os
          ms: Os <:< Traversable[O], // Fix O
          cs: Cs <:< Traversable[C], // Fix C
          link: LinkPoly.Case[Out[O], C]
@@ -285,8 +302,15 @@ class ArrowGraph {
             def apply(producer: P, consumers: Cs) {
                 DEBUG("[Split]")
 
-                out(producer)
-                cs.apply(consumers) // TODO: one by one
+                val out = genOut(producer)
+
+                cs(consumers)
+                    .toIndexedSeq
+                    .zipWithIndex
+                    .map { case (consumer, idx) => {
+                        val outPort = new OutList[O, Os](out, idx)
+                        link(outPort, consumer)
+                    }}
             }
         }
 
@@ -296,7 +320,7 @@ class ArrowGraph {
         implicit def Join[Ps, P, O, Is, I, C]
         (implicit
          ps: Ps <:< Traversable[P], // Fix P
-         in: (C Inputs Is), // Fix Is
+         genIn: (C Inputs Is), // Fix Is
          is: Is <:< Traversable[I], // Fix I
          link: LinkPoly.Case[P, In[I]]
         ): JoinCase[Ps, C]
@@ -304,11 +328,21 @@ class ArrowGraph {
             def apply(producers: Ps, consumer: C) {
                 DEBUG("[Join]")
 
-                ps.apply(producers) // TODO: one by one
-                in(consumer)
+                val in = genIn(consumer)
+
+                ps(producers)
+                    .toIndexedSeq
+                    .zipWithIndex
+                    .map { case (producer, idx) => {
+                        val inPort = new InList[I, Is](in, idx)
+                        link(producer, inPort)
+                    }}
+                genIn(consumer)
             }
         }
 
+// There is something wrong with this case.
+// I cannot solve it right now.
 //        abstract class MatchCase[Ps, Cs] extends Case[Ps, Cs]
 //
 //        implicit def Match[Ps, P, Cs, C]
@@ -340,20 +374,22 @@ class ArrowGraph {
 
         // Out[HNil] |> HNil
         implicit def HSplitNil[M <: HNil, P, Cs <: HNil]
-        (implicit out: (P Outputs M))
+        (implicit genOut: (P Outputs M))
         : HSplitCase[P, Cs]
         = new HSplitCase[P, Cs] {
             def apply(producer: P, consumers: Cs) {
                 DEBUG("[HSplitNil]")
 
-                out(producer)
+                val out = genOut(producer)
+
+                // TODO: do nothing here?
             }
         }
 
         // Out[A :: B :: HNil] |> (In[A] :: In[B] :: HNil)
         implicit def HSplit[P, Os <: HList, OH, OT <: HList, Cs <: HList, CH, CT <: HList]
         (implicit
-         out: (P Outputs Os), // Fix Os
+         genOut: (P Outputs Os), // Fix Os
          os: Os <:< (OH :: OT), // Fix OH & OT
          cs: Cs <:< (CH :: CT), // Fix CH & CT
          linkHead: LinkPoly.Case[Out[OH], CH],
@@ -363,7 +399,14 @@ class ArrowGraph {
             def apply(producer: P, consumers: Cs) {
                 DEBUG("[HSplit]")
 
-                out(producer)
+                val out = genOut(producer)
+
+                // TODO: should I perform a lookup?
+                val outHd = new OutHd[OH, Os](out)
+                val outTl = new OutTl[OT, Os](out)
+
+                linkHead.apply(outHd, consumers.head)
+                linkTail.apply(outTl, consumers.tail)
             }
         }
 
@@ -371,19 +414,21 @@ class ArrowGraph {
         abstract class HJoinCase[Ps <: HList, C] extends Case[Ps, C]
 
         implicit def HJoinNil[Ps <: HNil, C, M <: HNil]
-        (implicit in: (C Inputs M))
+        (implicit genIn: (C Inputs M))
         : HJoinCase[Ps, C]
         = new HJoinCase[Ps, C] {
             def apply(producers: Ps, consumer: C) {
                 DEBUG("[HJoinNil]")
 
-                in(consumer)
+                val in = genIn(consumer)
+
+                // TODO: do nothing here?
             }
         }
 
         implicit def HJoin[Ps <: HList, PH, PT <: HList, M <: HList, MH, MT <: HList, C]
         (implicit
-         in: (C Inputs M),
+         genIn: (C Inputs M),
          m: M <:< (MH :: MT),
          ps: Ps <:< (PH :: PT),
          linkHead: LinkPoly.Case[PH, In[MH]],
@@ -393,7 +438,14 @@ class ArrowGraph {
             def apply(producers: Ps, consumer: C) {
                 DEBUG("[HJoin]")
 
-                in(consumer)
+                val in = genIn(consumer)
+
+                // TODO: should I perform a lookup?
+                val inHd = new InHd[MH, M](in)
+                val inTl = new InTl[MT, M](in)
+
+                linkHead(producers.head, inHd)
+                linkTail(producers.tail, inTl)
             }
         }
 
@@ -415,6 +467,7 @@ class ArrowGraph {
         ) extends HMatchCase[PH :: PT, CH :: CT] {
             def apply(producers: PH :: PT, consumers: CH :: CT) {
                 DEBUG("[HMatch]")
+
                 linkHead.apply(producers.head, consumers.head)
                 linkTail.apply(producers.tail, consumers.tail)
             }

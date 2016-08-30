@@ -71,3 +71,18 @@ object HMatchChainTest {
         (g0 :: g1 :: HNil) |> (g0 :: g1 :: HNil)
     }
 }
+
+object ComplexFlowTest {
+    def main(args: Array[String]) {
+        val graph = new ArrowGraph
+        import graph._
+
+        val query = (id: Int) => {
+            val name = "John Smith"
+            val age = 20
+            name :: age :: HNil
+        }
+
+//        val query =
+    }
+}
