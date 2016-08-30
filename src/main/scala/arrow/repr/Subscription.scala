@@ -22,12 +22,20 @@
  * THE SOFTWARE.
  */
 
-package arrow
+package arrow.repr
 
-import arrow.repr._
+import arrow._
 
-trait Node[I, O] extends NodeUntyped
+trait Subscription {
+    val from: OutUntyped
+    val to: InUntyped
 
-object Node {
-    def apply[I, O](func: I => O): Node[I, O] = FunctionNode(func)
+    override def toString = s"$from -> $to"
 }
+
+class SubscriptionImpl[T](val from: Out[T], val to: In[T])
+    extends Subscription
+
+class SubscriptionRImpl[RT, T](val from: Out[RT], val to: In[T])
+                              (implicit rT: RT <:< R[T])
+    extends Subscription

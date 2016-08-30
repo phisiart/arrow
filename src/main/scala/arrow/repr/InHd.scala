@@ -22,12 +22,15 @@
  * THE SOFTWARE.
  */
 
-package arrow
+package arrow.repr
 
-import arrow.repr._
+import shapeless._
 
-trait Node[I, O] extends NodeUntyped
+trait InHdUntyped extends InUntyped {
+    val in: InUntyped
 
-object Node {
-    def apply[I, O](func: I => O): Node[I, O] = FunctionNode(func)
+    override def toString = s"$in.hd"
 }
+
+class InHd[IH, I <: HList](val in: In[I])
+    extends In[IH] with InHdUntyped

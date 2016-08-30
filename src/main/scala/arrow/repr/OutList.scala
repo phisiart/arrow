@@ -22,12 +22,14 @@
  * THE SOFTWARE.
  */
 
-package arrow
+package arrow.repr
 
-import arrow.repr._
+trait OutListUntyped {
+    val out: OutUntyped
+    val id: Int
 
-trait Node[I, O] extends NodeUntyped
-
-object Node {
-    def apply[I, O](func: I => O): Node[I, O] = FunctionNode(func)
+    override def toString = s"$out[$id]"
 }
+
+class OutList[O, Os](val out: Out[Os], val id: Int)
+    extends Out[O] with OutListUntyped

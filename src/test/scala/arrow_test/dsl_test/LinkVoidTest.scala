@@ -24,11 +24,10 @@
 
 package arrow_test.dsl_test
 
-import java.util
-
 import arrow._
+import arrow.repr.In
 import shapeless._
-import syntax.std.tuple._
+import shapeless.syntax.std.tuple._
 
 object OneToOneTest {
     def main(args: Array[String]) {

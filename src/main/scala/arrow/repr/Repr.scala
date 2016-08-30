@@ -24,24 +24,7 @@
 
 package arrow.repr
 
-import arrow._
-import scala.collection.mutable.ArrayBuffer
-
 class Repr {
-    trait Subscription {
-        val from: OutUntyped
-        val to: InUntyped
-
-        override def toString = s"$from -> $to"
-    }
-
-    class SubscriptionImpl[T](val from: Out[T], val to: In[T])
-        extends Subscription
-
-    class SubscriptionRImpl[RT, T](val from: Out[RT], val to: In[T])
-                                  (implicit rT: RT <:< R[T])
-        extends Subscription
-
 //    trait Processor
 //
 //    trait OneToOneProcessor[I, O] extends Processor
@@ -73,13 +56,22 @@ class Repr {
 //    val processors = ArrayBuffer.empty[Processor]
 
     def insertNode(node: NodeUntyped) = {
-        nodes(node) = true
+        if (!node_map.contains(node)) {
+            node_map(node) = node_seq.size
+            node_seq.append(node)
+            node_seq.size - 1
+        } else {
+            node_map(node)
+        }
     }
 
     def insertSubscription(subscription: Subscription) = {
         subscriptions(subscription) = true
     }
 
-    val nodes = collection.mutable.Set.empty[NodeUntyped]
+    val node_map = collection.mutable.Map.empty[NodeUntyped, Int]
+    val node_seq = collection.mutable.ArrayBuffer.empty[NodeUntyped]
+
+//    val nodes = collection.mutable.Set.empty[NodeUntyped]
     val subscriptions = collection.mutable.Set.empty[Subscription]
 }

@@ -22,12 +22,15 @@
  * THE SOFTWARE.
  */
 
-package arrow
+package arrow.repr
 
-import arrow.repr._
+import shapeless._
 
-trait Node[I, O] extends NodeUntyped
+trait InTlUntyped extends InUntyped {
+    val in: InUntyped
 
-object Node {
-    def apply[I, O](func: I => O): Node[I, O] = FunctionNode(func)
+    override def toString = s"$in.tl"
 }
+
+class InTl[IT <: HList, I <: HList](val in: In[I])
+    extends In[IT] with InTlUntyped

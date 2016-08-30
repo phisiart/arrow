@@ -22,12 +22,8 @@
  * THE SOFTWARE.
  */
 
-package arrow
+package arrow.repr
 
-import arrow.repr._
+trait InUntyped
 
-trait Node[I, O] extends NodeUntyped
-
-object Node {
-    def apply[I, O](func: I => O): Node[I, O] = FunctionNode(func)
-}
+trait In[I] extends InUntyped

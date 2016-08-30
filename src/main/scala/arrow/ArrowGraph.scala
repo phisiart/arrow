@@ -28,6 +28,7 @@ import arrow.repr._
 import shapeless._
 
 class ArrowGraph {
+    /** The intermediate representation of the graph. */
     val repr = new Repr
 
     abstract class Outputs[P, O] {
@@ -64,7 +65,7 @@ class ArrowGraph {
             val node = FunctionNode(c)
             repr.insertNode(node)
 
-            new NodeIn[I, O](node)
+            new NodeIn[I, O](repr, node)
         }
     }
 
@@ -79,7 +80,7 @@ class ArrowGraph {
             val node = FunctionNode(p)
             repr.insertNode(node)
 
-            new NodeOut[I, O](node)
+            new NodeOut[I, O](repr, node)
         }
     }
 
@@ -92,7 +93,7 @@ class ArrowGraph {
 
             val node = n(c)
             repr.insertNode(node)
-            new NodeIn[I, O](node)
+            new NodeIn[I, O](repr, node)
         }
     }
 
@@ -108,7 +109,7 @@ class ArrowGraph {
 
             val node = n(p)
             repr.insertNode(node)
-            new NodeOut[I, O](node)
+            new NodeOut[I, O](repr, node)
         }
     }
 
@@ -227,7 +228,7 @@ class ArrowGraph {
 
                 val out = genOut(producer)
                 val in = genIn(consumer)
-                val subscription = new repr.SubscriptionImpl[M](out, in)
+                val subscription = new SubscriptionImpl[M](out, in)
                 repr.insertSubscription(subscription)
             }
         }
@@ -247,7 +248,7 @@ class ArrowGraph {
 
                 val out = genOut(producer)
                 val in = genIn(consumer)
-                val subscription = new repr.SubscriptionRImpl[RM, M](out, in)
+                val subscription = new SubscriptionRImpl[RM, M](out, in)
                 repr.insertSubscription(subscription)
             }
         }
