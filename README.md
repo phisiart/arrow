@@ -18,35 +18,81 @@ Arrow is being reconstructed and open-sourced. The following features are to be 
 
 ## Connection Examples
 ### A Simple Flow
-```scala
-val producer: Node[Int, Int] = ...
-// or (function instead of node):
-// val producer: Int => Int = ...
+1. Create a producer node:
 
-val consumer: Node[Int, Int] = ...
-// or (function instead of node):
-// val consumer: Int => Int = ...
+    ```scala
+    val producer: Node[Int, Int] = ...
+    ```
+    
+    or a function:
+    
+    ```scala
+    val producer: Int => Int = ...
+    ```
+2. Create a consumer node:
 
-val flow = Stream(1, 2, 3) |> producer |> consumer
-// or (associativity):
-// val flow = Stream(1, 2, 3) |> (producer |> consumer)
-// or (right to left):
-// val flow = consumer <| producer <| Stream(1, 2, 3)
-```
+    ```scala
+    val consumer: Node[Int, Int] = ...
+    ```
+    
+    or a function:
+    
+    ```scala
+    val consumer: Int => Int = ...
+    ```
+3. Connect nodes and supply an input stream with the polymorphic `|>` operator:
+
+    ```scala
+    val flow = Stream(1, 2, 3) |> producer |> consumer
+    ```
+    
+    Consumer would then output a stream of `Int`s.
+    
+    Note that producer/consumer can either be `Node`s or functions. The input/output types must match between connections.
+    
+    `|>` is associative:
+    
+    ```scala
+    val flow = Stream(1, 2, 3) |> (producer |> consumer)
+    ```
+    You can also use `<|`:
+    
+    ```scala
+    val flow = consumer <| producer <| Stream(1, 2, 3)
+    ```
 
 ### Broadcast
-```scala
-// `_` means the type is unimportant here, similarly hereinafter
-// `I => O` can also be `Node[I, O]`, similarly hereinafter
-// `List` can also be any subtype of `Traversable`, similarly hereinafter
-val producer: _ => Int = ...
-val consumers: List[Int => _] = ...
-producer |> consumers
-```
+1. Create a producer (a node or a function, here a function):
 
-### Collect
+    ```scala
+    val producer: _ => Int = ...
+    ```
+    
+    `_` means the type is unimportant here, similarly hereinafter.
+    
+2. Create a bunch of consumers (`List` can also be any subtype of `Traversable`):
+
+    ```scala
+    val consumers: List[Int => _] = ...
+    ```
+
+3. Connect using just one line:
+
+    ```scala
+    producer |> consumers
+    ```
+    
+    instead of:
+    
+    ```scala
+    for (consumer <- consumers) {
+        producer |> consumer
+    }
+    ```
+
+### Merge
 ```scala
-val producers: Vector[_ => Int] = ...
+val producers: List[_ => Int] = ...
 val consumer: Int => _ = ...
 producers |> consumer
 ```
