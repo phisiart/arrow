@@ -29,8 +29,6 @@ import arrow.repr._
 import shapeless._
 import shapeless.syntax.std.tuple._
 
-import scala.collection.mutable.ArrayBuffer
-
 object OneToOneTest {
     def main(args: Array[String]) {
         val graph = new ArrowGraph
@@ -195,7 +193,7 @@ object BroadcastRTest {
     }
 }
 
-object CollectTest {
+object MergeTest {
     def main(args: Array[String]) {
         val graph = new ArrowGraph
         import graph._
@@ -228,7 +226,7 @@ object CollectTest {
     }
 }
 
-object CollectRTest {
+object MergeRTest {
     def main(args: Array[String]) {
         val graph = new ArrowGraph
         import graph._
@@ -689,5 +687,23 @@ object RecursiveHSplitTest {
         val gs = in :: (in :: identity[Int] _ :: HNil) :: HNil
 
         f |> gs
+    }
+}
+
+object MatchTest {
+    def main(args: Array[String]) {
+        val graph = new ArrowGraph
+        import graph._
+
+        val f = (x: Int) => x
+        val g = (x: Int) => x
+
+        val fs = List(f, f)
+        val gs = List(g, g)
+
+        implicitly[RawLinkPoly.MatchCase[List[Int => Int], List[Int => Int]]]
+
+
+        fs |> gs
     }
 }

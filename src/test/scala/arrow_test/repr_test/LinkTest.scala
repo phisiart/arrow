@@ -25,6 +25,7 @@
 package arrow_test.repr_test
 
 import arrow._
+import org.apache.spark.rdd.RDD
 import shapeless._
 
 object OneToOneTest {
@@ -32,8 +33,8 @@ object OneToOneTest {
         val graph = new ArrowGraph
         import graph._
 
-        val f = (x: Int) => x
-        val g = (y: Int) => y
+        val f = (x: RDD[Int]) => x
+        val g = (y: RDD[Int]) => y
 
         f |> g
 

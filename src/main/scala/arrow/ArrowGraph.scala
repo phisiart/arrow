@@ -27,6 +27,8 @@ package arrow
 import arrow.repr._
 import shapeless._
 
+import scala.language.implicitConversions
+
 class ArrowGraph {
     /** The intermediate representation of the graph. */
     val repr = new Repr
@@ -280,21 +282,24 @@ class ArrowGraph {
         /** For [[implicitly]] testing */
         abstract class BroadcastCase[P, Cs] extends Case[P, Cs]
 
-        final class BroadcastCaseImpl[P, Cs, C]
-        (implicit cs: Cs <:< Traversable[C], link: LinkPoly.Case[P, C])
+        final class BroadcastCaseImpl[P, O, Cs, C]
+        (implicit cs: Cs <:< Traversable[C], p: P Outputs O, link: LinkPoly.Case[P, C],
+         p_mani: Manifest[P], cs_mani: Manifest[Cs], c_mani: Manifest[C])
         extends BroadcastCase[P, Cs] {
-            def apply(producer: P, consumers: Cs) {
-                DEBUG("[Broadcast]")
+            DEBUG("[Broadcast]")
+//            DEBUG(s"P = $p_mani, Cs = $cs_mani, c = $c_mani")
 
+            def apply(producer: P, consumers: Cs) {
                 cs(consumers).map(consumer => {
                     link.apply(producer, consumer)
                 })
             }
         }
 
-        implicit def Broadcast[P, Cs, C]
-        (implicit cs: Cs <:< Traversable[C], link: LinkPoly.Case[P, C])
-        = new BroadcastCaseImpl[P, Cs, C]
+        implicit def Broadcast[P, O, Cs, C]
+        (implicit cs: Cs <:< Traversable[C], p: P Outputs O, link: LinkPoly.Case[P, C],
+         p_mani: Manifest[P], cs_mani: Manifest[Cs], c_mani: Manifest[C])
+        = new BroadcastCaseImpl[P, O, Cs, C]
 
         // =====================================================================
         //  Merge
@@ -303,8 +308,8 @@ class ArrowGraph {
         /** For [[implicitly]] testing */
         abstract class MergeCase[Ps, C] extends Case[Ps, C]
 
-        final class MergeCaseImpl[Ps, P, C]
-        (implicit ps: Ps <:< Traversable[P], link: LinkPoly.Case[P, C])
+        final class MergeCaseImpl[Ps, P, C, I]
+        (implicit ps: Ps <:< Traversable[P], c: C Inputs I, link: LinkPoly.Case[P, C])
         extends MergeCase[Ps, C] {
             def apply(producers: Ps, consumer: C) {
                 DEBUG("[Collect]")
@@ -315,9 +320,9 @@ class ArrowGraph {
             }
         }
 
-        implicit def GenMergeCase[Ps, P, C]
-        (implicit ps: Ps <:< Traversable[P], link: LinkPoly.Case[P, C])
-        = new MergeCaseImpl[Ps, P, C]
+        implicit def GenMergeCase[Ps, P, C, I]
+        (implicit ps: Ps <:< Traversable[P], c: C Inputs I, link: LinkPoly.Case[P, C])
+        = new MergeCaseImpl[Ps, P, C, I]
 
         // =====================================================================
         //  Split
@@ -520,32 +525,25 @@ class ArrowGraph {
         //  Match
         // =====================================================================
 
-        // There is something wrong with this case.
-        // I cannot solve it right now.
-        //        abstract class MatchCase[Ps, Cs] extends Case[Ps, Cs]
-        //
-        //        implicit def Match[Ps, P, Cs, C]
-        //        (implicit
-        //         ps: Ps <:< Traversable[P],
-        //         cs: Cs <:< Traversable[C]
-        ////         ps_m: Manifest[Ps],
-        ////         cs_m: Manifest[Cs]
-        ////         link: LinkPoly.Case[P, C]
-        //        ): MatchCase[Ps, Cs]
-        //        = {
-        ////            DEBUG(ps_m)
-        ////            DEBUG(cs_m)
-        //
-        //            new MatchCase[Ps, Cs] {
-        //                def apply(producers: Ps, consumers: Cs) {
-        //                    DEBUG("[Match]")
-        //
-        //    //                (ps.apply(producers).toVector zip cs.apply(consumers).toVector)
-        //    //                    .foreach { case (producer, consumer) => {
-        //    //                        link.apply(producer, consumer)
-        //    //                    }}
-        //                }
-        //            }
-        //        }
+        abstract class MatchCase[Ps, Cs] extends Case[Ps, Cs]
+
+        final class MatchCaseImpl[Ps, P, Cs, C]
+        (implicit ps: Ps <:< Traversable[P], cs: Cs <:< Traversable[C], link: LinkPoly.Case[P, C])
+            extends MatchCase[Ps, Cs] {
+
+            DEBUG("[Match]")
+
+            def apply(producers: Ps, consumers: Cs) {
+                (ps.apply(producers).toVector zip cs.apply(consumers).toVector)
+                    .foreach { case (producer, consumer) => {
+                        link.apply(producer, consumer)
+                    }}
+            }
+        }
+
+        implicit def Match[Ps, P, Cs, C]
+        (implicit ps: Ps <:< Traversable[P], cs: Cs <:< Traversable[C], link: LinkPoly.Case[P, C])
+        : MatchCaseImpl[Ps, P, Cs, C]
+        = new MatchCaseImpl[Ps, P, Cs, C]
     }
 }

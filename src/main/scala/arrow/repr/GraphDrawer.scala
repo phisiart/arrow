@@ -24,29 +24,12 @@
 
 package arrow.repr
 
-
 import java.awt.Desktop
 import java.io._
 
-import scalax.collection.edge._
-import scalax.collection.io.dot._
-import scalax.collection.io.dot.implicits._
-import scalax.collection._
+import scala.language.postfixOps
 
 object GraphDrawer {
-    type GraphT = GraphBase[Processor, LDiEdge]
-    type EdgeT = GraphT#EdgeT
-    type NodeT = GraphT#NodeT
-
-    val root = DotRootGraph(
-        directed = true,
-        id = Some("Dot Graph"),
-        attrStmts = List(
-            DotAttrStmt(Elem.node, List(DotAttr("shape", "circle"))),
-            DotAttrStmt(Elem.graph, List(DotAttr("rankdir", "LR")))
-        )
-    )
-
     def getProcessorName(processor: Processor): String = {
         val _ = processor match {
             case NodeProcessor(node, id) =>
@@ -87,27 +70,8 @@ object GraphDrawer {
         }
     }
 
-    def nodeTransformer(innerNode: NodeT): Option[(DotGraph, DotNodeStmt)] = {
-        val shape = getProcessorShape(innerNode.value)
-        val attrs = List(DotAttr("shape", shape))
-
-        val name = getProcessorName(innerNode.value)
-
-        Some(root, DotNodeStmt(name, attrs))
-    }
-
-    def edgeTransformer(innerEdge: EdgeT): Option[(DotGraph, DotEdgeStmt)] = {
-        innerEdge.edge match {
-            case LDiEdge(source, target, label) =>
-                Some(
-                    (root, DotEdgeStmt(source.toString, target.toString))
-                )
-        }
-    }
 
     def draw(processors: Iterable[Processor], subscriptions: Iterable[Subscription]) = {
-//        val graph = mutable.Graph.empty[Processor, LDiEdge]
-
         val builder = StringBuilder.newBuilder
 
         builder.append(s"""digraph "Graph" {\n""")
@@ -116,7 +80,6 @@ object GraphDrawer {
 
         for (processor <- processors) {
             builder.append(s""" "${getProcessorName(processor)}" [shape = ${getProcessorShape(processor)}]\n""")
-//            graph.add(processor)
         }
 
         for (subscription <- subscriptions) {
@@ -150,17 +113,11 @@ object GraphDrawer {
 
             builder.append(s""" "${getProcessorName(from)}" -> "${getProcessorName(to)}" [label = "$label"]\n""")
 
-//            graph.add(
-//                LDiEdge(from, to)(label)
-//            )
         }
 
         builder.append("}\n")
 
         import scala.sys.process._
-
-//        val export = new Export(graph)
-//        val dot = export.toDot(root, edgeTransformer, cNodeTransformer = Some(nodeTransformer _))
 
         val dot = builder.mkString
         println(dot)
@@ -172,6 +129,8 @@ object GraphDrawer {
 
         val dotRet = "dot -Tpdf graph.dot -o graph.pdf" ! ; // this stupid semicolon
         println(dotRet)
+
+        dotFile.delete()
 
         val svgFile = new File("graph.pdf")
 

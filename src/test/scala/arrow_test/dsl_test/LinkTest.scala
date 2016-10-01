@@ -82,7 +82,5 @@ object ComplexFlowTest {
             val age = 20
             name :: age :: HNil
         }
-
-//        val query =
     }
 }

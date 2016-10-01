@@ -31,7 +31,6 @@ import collection.mutable.ArrayBuffer
 class Repr {
     def insertSubscription(subscription: Subscription) = {
         subscriptions += subscription
-        // subscriptions(subscription) = true
     }
 
     def draw() = {
@@ -56,12 +55,16 @@ class Repr {
         } else {
             val id = this.processors.length
             this.nodeToId(node) = id
-            val processor = new NodeProcessor(node, id)
+            val processor = NodeProcessor(node, id)
             this.processors.append(processor)
             processor
         }
     }
 
+    /**
+      * Given a function, ensure it is recorded in the [[Repr]], and return the
+      * [[Processor]].
+      */
     private def functionToProcessor[I, O](func: I => O)
     : NodeProcessor[I, O] = {
         this.processors
@@ -134,17 +137,17 @@ class Repr {
         match {
             case Some(x) =>
                 val hJoiner = x.asInstanceOf[HJoiner[IH, IT, I]]
-                new HJoinerHdIn(hJoiner)
+                HJoinerHdIn(hJoiner)
 
             case None =>
                 // Create a new HJoiner and attach to the input.
                 val hJoiner = new HJoiner[IH, IT, I](in)
                 this.processors.append(hJoiner)
 
-                val hJoinerOut = new SingleOutputProcessorOut(hJoiner)
+                val hJoinerOut = SingleOutputProcessorOut(hJoiner)
                 this.insertSubscription(hJoinerOut, in)
 
-                new HJoinerHdIn(hJoiner)
+                HJoinerHdIn(hJoiner)
         }
     }
 
@@ -173,17 +176,17 @@ class Repr {
         match {
             case Some(x) =>
                 val hJoiner = x.asInstanceOf[HJoiner[IH, IT, I]]
-                new HJoinerTlIn(hJoiner)
+                HJoinerTlIn(hJoiner)
 
             case None =>
                 // Create a new HJoiner and attach to the input.
                 val hJoiner = new HJoiner[IH, IT, I](in)
                 this.processors.append(hJoiner)
 
-                val hJoinerOut = new SingleOutputProcessorOut(hJoiner)
+                val hJoinerOut = SingleOutputProcessorOut(hJoiner)
                 this.insertSubscription(hJoinerOut, in)
 
-                new HJoinerTlIn(hJoiner)
+                HJoinerTlIn(hJoiner)
         }
     }
 
@@ -208,9 +211,9 @@ class Repr {
             case None =>
                 val joiner = new Joiner[I, Is](in)
                 this.processors.append(joiner)
-                val joinerOut = new SingleOutputProcessorOut(joiner)
+                val joinerOut = SingleOutputProcessorOut(joiner)
                 this.insertSubscription(joinerOut, in)
-                new JoinerIn(joiner, idx)
+                JoinerIn(joiner, idx)
         }
     }
 
@@ -245,14 +248,14 @@ class Repr {
         match {
             case Some(x) =>
                 val hSplitter = x.asInstanceOf[HSplitter[OH, OT, O]]
-                new HSplitterHdOut(hSplitter)
+                HSplitterHdOut(hSplitter)
 
             case None =>
                 val hSplitter = new HSplitter[OH, OT, O](out)
                 this.processors.append(hSplitter)
-                val hSplitterIn = new SingleInputProcessorIn(hSplitter)
+                val hSplitterIn = SingleInputProcessorIn(hSplitter)
                 this.insertSubscription(out, hSplitterIn)
-                new HSplitterHdOut(hSplitter)
+                HSplitterHdOut(hSplitter)
         }
     }
 
@@ -272,14 +275,14 @@ class Repr {
         match {
             case Some(x) =>
                 val hSplitter = x.asInstanceOf[HSplitter[OH, OT, O]]
-                new HSplitterTlOut(hSplitter)
+                HSplitterTlOut(hSplitter)
 
             case None =>
                 val hSplitter = new HSplitter[OH, OT, O](out)
                 this.processors.append(hSplitter)
-                val hSplitterIn = new SingleInputProcessorIn(hSplitter)
+                val hSplitterIn = SingleInputProcessorIn(hSplitter)
                 this.insertSubscription(out, hSplitterIn)
-                new HSplitterTlOut(hSplitter)
+                HSplitterTlOut(hSplitter)
         }
     }
 
@@ -299,17 +302,14 @@ class Repr {
         match {
             case Some(x) =>
                 val splitter = x.asInstanceOf[Splitter[O, Os]]
-                new SplitterOut(splitter, idx)
+                SplitterOut(splitter, idx)
 
             case None =>
                 val splitter = new Splitter[O, Os](out)
                 this.processors.append(splitter)
-                val splitterIn = new SingleInputProcessorIn(splitter)
+                val splitterIn = SingleInputProcessorIn(splitter)
                 this.insertSubscription(out, splitterIn)
-                new SplitterOut(splitter, idx)
+                SplitterOut(splitter, idx)
         }
     }
-}
-
-object Repr {
 }
