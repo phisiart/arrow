@@ -24,6 +24,63 @@
 
 package arrow.repr
 
+import shapeless._
+
+import collection.mutable.ArrayBuffer
+
 trait OutUntyped
 
-trait Out[O] extends OutUntyped
+trait Out[O] extends OutUntyped {
+    def addSubscription(subscription: SubscriptionFrom[O])
+
+    def pushTo: ArrayBuffer[SubscriptionFrom[O]]
+}
+
+/** All types of [[Out]]: */
+
+final case class SingleOutputProcessorOut[O]
+(processor: SingleOutputProcessor[O]) extends Out[O] {
+    override def toString = s"${this.processor}.out"
+
+    override def addSubscription(subscription: SubscriptionFrom[O]) = {
+        this.processor.pushTo.append(subscription)
+    }
+
+    override def pushTo: ArrayBuffer[SubscriptionFrom[O]] = this.processor.pushTo
+}
+
+final case class HSplitterHdOut[OH, OT <: HList, Os <: HList]
+(hSplitter: HSplitter[OH, OT, Os]) extends Out[OH] {
+    override def toString = s"${this.hSplitter}.hd"
+
+    override def addSubscription(subscription: SubscriptionFrom[OH]) = {
+        this.hSplitter.pushToHd.append(subscription)
+    }
+
+    override def pushTo: ArrayBuffer[SubscriptionFrom[OH]] = this.hSplitter.pushToHd
+}
+
+final case class HSplitterTlOut[OH, OT <: HList, O <: HList]
+(hSplitter: HSplitter[OH, OT, O]) extends Out[OT] {
+    override def toString = s"${this.hSplitter}.tl"
+
+    override def addSubscription(subscription: SubscriptionFrom[OT]) = {
+        this.hSplitter.pushToTl.append(subscription)
+    }
+
+    override def pushTo: ArrayBuffer[SubscriptionFrom[OT]] = this.hSplitter.pushToTl
+}
+
+final case class SplitterOut[O, Os]
+(splitter: Splitter[O, Os], idx: Int) extends Out[O] {
+
+    this.splitter.ensureIdx(idx)
+
+    override def toString = s"$splitter.out[$idx]"
+
+    override def addSubscription(subscription: SubscriptionFrom[O]) = {
+        this.splitter.pushTos(idx).append(subscription)
+    }
+
+    override def pushTo: ArrayBuffer[SubscriptionFrom[O]] = this.splitter.pushTos(idx)
+}

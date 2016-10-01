@@ -25,9 +25,11 @@
 package arrow_test.dsl_test
 
 import arrow._
-import arrow.repr.In
+import arrow.repr._
 import shapeless._
 import shapeless.syntax.std.tuple._
+
+import scala.collection.mutable.ArrayBuffer
 
 object OneToOneTest {
     def main(args: Array[String]) {
@@ -214,10 +216,10 @@ object CollectTest {
             def apply(x: T) = g(x)
         }
 
-        implicitly[RawLinkPoly.CollectCase[List[T => T], T => T]]
-        implicitly[RawLinkPoly.CollectCase[List[T => T], Node[T, T]]]
-        implicitly[RawLinkPoly.CollectCase[List[Node[T, T]], T => T]]
-        implicitly[RawLinkPoly.CollectCase[List[T => T], Node[T, T]]]
+        implicitly[RawLinkPoly.MergeCase[List[T => T], T => T]]
+        implicitly[RawLinkPoly.MergeCase[List[T => T], Node[T, T]]]
+        implicitly[RawLinkPoly.MergeCase[List[Node[T, T]], T => T]]
+        implicitly[RawLinkPoly.MergeCase[List[T => T], Node[T, T]]]
 
         fs |> g
         fs |> y
@@ -248,10 +250,10 @@ object CollectRTest {
             def apply(x: T) = g(x)
         }
 
-        implicitly[RawLinkPoly.CollectCase[List[T => Push[T]], T => T]]
-        implicitly[RawLinkPoly.CollectCase[List[T => Push[T]], Node[T, T]]]
-        implicitly[RawLinkPoly.CollectCase[List[Node[T, Push[T]]], T => T]]
-        implicitly[RawLinkPoly.CollectCase[List[Node[T, Push[T]]], Node[T, T]]]
+        implicitly[RawLinkPoly.MergeCase[List[T => Push[T]], T => T]]
+        implicitly[RawLinkPoly.MergeCase[List[T => Push[T]], Node[T, T]]]
+        implicitly[RawLinkPoly.MergeCase[List[Node[T, Push[T]]], T => T]]
+        implicitly[RawLinkPoly.MergeCase[List[Node[T, Push[T]]], Node[T, T]]]
 
         fs |> g
         fs |> y
@@ -672,7 +674,10 @@ object HMatchTest {
 }
 
 object RecursiveHSplitTest {
-    def DummyIn[I](): In[I] = new In[I] { }
+    def DummyIn[I](): In[I] = new In[I] {
+        override def pullFrom = null
+        override def addSubscription(subscription: SubscriptionTo[I]) {}
+    }
 
     def main(args: Array[String]) {
         val graph = new ArrowGraph

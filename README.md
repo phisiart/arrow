@@ -12,7 +12,7 @@ Arrow is being reconstructed and open-sourced. The following features are to be 
 
 - [x] Type Checking
 - [x] Graph Constructing
-- [ ] Graph Drawing
+- [x] Graph Drawing
 - [ ] Parallel Runtime
 - [ ] Distributed Execution Support
 

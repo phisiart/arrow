@@ -24,6 +24,62 @@
 
 package arrow.repr
 
+import shapeless._
+
+import collection.mutable.ArrayBuffer
+
 trait InUntyped
 
-trait In[I] extends InUntyped
+trait In[I] extends InUntyped {
+    def addSubscription(subscription: SubscriptionTo[I])
+
+    def pullFrom: ArrayBuffer[SubscriptionTo[I]]
+}
+
+/** All types of [[In]]: */
+
+final case class SingleInputProcessorIn[I]
+(processor: SingleInputProcessor[I]) extends In[I] {
+    override def toString = s"${this.processor}.in"
+
+    override def addSubscription(subscription: SubscriptionTo[I]) = {
+        this.processor.pullFrom.append(subscription)
+    }
+
+    override def pullFrom: ArrayBuffer[SubscriptionTo[I]] = this.processor.pullFrom
+}
+
+final case class HJoinerHdIn[IH, IT <: HList, I <: HList]
+(hJoiner: HJoiner[IH, IT, I]) extends In[IH] {
+    override def toString = s"$hJoiner.hd"
+
+    override def addSubscription(subscription: SubscriptionTo[IH]) = {
+        this.hJoiner.pullFromHd.append(subscription)
+    }
+
+    override def pullFrom: ArrayBuffer[SubscriptionTo[IH]] = this.hJoiner.pullFromHd
+}
+
+final case class HJoinerTlIn[IH, IT <: HList, I <: HList]
+(hJoiner: HJoiner[IH, IT, I]) extends In[IT] {
+    override def toString = s"$hJoiner.tl"
+
+    override def addSubscription(subscription: SubscriptionTo[IT]) = {
+        this.hJoiner.pullFromTl.append(subscription)
+    }
+
+    override def pullFrom: ArrayBuffer[SubscriptionTo[IT]] = this.hJoiner.pullFromTl
+}
+
+final case class JoinerIn[I, Is]
+(joiner: Joiner[I, Is], idx: Int) extends In[I] {
+    this.joiner.ensureIdx(idx)
+
+    override def toString = s"${this.joiner}.in[$idx]"
+
+    override def addSubscription(subscription: SubscriptionTo[I]) = {
+        this.joiner.pullFroms(idx).append(subscription)
+    }
+
+    override def pullFrom: ArrayBuffer[SubscriptionTo[I]] = this.joiner.pullFroms(idx)
+}

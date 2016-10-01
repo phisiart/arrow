@@ -31,13 +31,21 @@ class ArrowGraph {
     /** The intermediate representation of the graph. */
     val repr = new Repr
 
+    def draw() = {
+        repr.draw()
+    }
+
+    /**
+      * The evidence that [[P]] produces an output of type [[O]].
+      */
     abstract class Outputs[P, O] {
-        // TODO: should I perform a lookup?
         def apply(p: P): Out[O]
     }
 
+    /**
+      * The evidence that [[C]] consumes an input of type [[I]].
+      */
     abstract class Inputs[C, I] {
-        // TODO: should I perform a lookup?
         def apply(c: C): In[I]
     }
 
@@ -57,43 +65,43 @@ class ArrowGraph {
     implicit def GenOutIsOut[O]: (Out[O] Outputs O) =
         new OutIsOut[O]
 
+    /**
+      * The evidence that function [[I]] => [[O]] has input [[I]].
+      */
     class FunIsIn[I, O] extends ((I => O) Inputs I) {
         def apply(c: I => O): In[I] = {
             println("FunctionToIn")
 
-            // TODO: should I create a node every time?
-            val node = FunctionNode(c)
-            repr.insertNode(node)
-
-            new NodeIn[I, O](repr, node)
+            repr.makeFunctionIn(c)
         }
     }
 
     implicit def GenFunIsIn[I, O]: ((I => O) Inputs I) =
         new FunIsIn[I, O]
 
+    /**
+      * The evidence that function [[I]] => [[O]] has output [[O]].
+      */
     class FunIsOut[I, O] extends ((I => O) Outputs O) {
         def apply(p: I => O): Out[O] = {
             println("FunctionToOut")
 
-            // TODO: should I create a node every time?
-            val node = FunctionNode(p)
-            repr.insertNode(node)
-
-            new NodeOut[I, O](repr, node)
+            repr.makeFunctionOut(p)
         }
     }
 
     implicit def GenFunIsOut[I, O]: ((I => O) Outputs O) =
         new FunIsOut[I, O]
 
+    /**
+      * The evidence that [[N]] is a node with input type [[I]].
+      */
     class NodeIsIn[I, O, N](implicit n: N <:< Node[I, O]) extends (N Inputs I) {
         def apply(c: N): In[I] = {
             println("NodeIsIn")
 
             val node = n(c)
-            repr.insertNode(node)
-            new NodeIn[I, O](repr, node)
+            repr.makeNodeIn(node)
         }
     }
 
@@ -102,14 +110,16 @@ class ArrowGraph {
     : (N Inputs I)
     = new NodeIsIn[I, O, N]
 
+    /**
+      * The evidence that [[N]] is a node with output type [[O]].
+      */
     class NodeIsOut[I, O, N]
     (implicit n: N <:< Node[I, O]) extends (N Outputs O) {
         def apply(p: N): Out[O] = {
             println("NodeIsOut")
 
             val node = n(p)
-            repr.insertNode(node)
-            new NodeOut[I, O](repr, node)
+            repr.makeNodeOut(node)
         }
     }
 
@@ -118,6 +128,9 @@ class ArrowGraph {
     : (N Outputs O)
     = new NodeIsOut[I, O, N]
 
+    /**
+      * The evidence that [[S]] is a stream with element type [[O]].
+      */
     class StreamIsOut[O, S]
     (implicit s: S <:< Stream[O]) extends (S Outputs O) {
         def apply(p: S): Out[O] = {
@@ -146,6 +159,9 @@ class ArrowGraph {
     implicit def GenLinkableWrapper[T](linkable: T): LinkableWrapper[T] =
         LinkableWrapper(linkable)
 
+    /**
+      * Objects encapsulated with [[Flow]] should also be able to link.
+      */
     object LinkPoly {
         def DEBUG(x: Any) = println(x)
 
@@ -214,35 +230,34 @@ class ArrowGraph {
             def apply(a: A, b: B): Unit
         }
 
-        // For `implicitly` testing
+        // =====================================================================
+        //  One to One
+        // =====================================================================
+
+        /** For [[implicitly]] testing */
         abstract class OneToOneCase[P, C] extends Case[P, C]
 
-        implicit def OneToOne[M, P, C]
-        (implicit
-         genOut: (P Outputs M),
-         genIn: (C Inputs M)
-        ): OneToOneCase[P, C]
-        = new OneToOneCase[P, C] {
+        final class OneToOneCaseImpl[M, P, C]
+        (implicit genOut: P Outputs M, genIn: C Inputs M)
+        extends OneToOneCase[P, C] {
             def apply(producer: P, consumer: C) {
                 DEBUG("[OneToOne]")
-
                 val out = genOut(producer)
                 val in = genIn(consumer)
-                val subscription = new SubscriptionImpl[M](out, in)
-                repr.insertSubscription(subscription)
+                repr.insertSubscription(out, in)
             }
         }
 
-        // For `implicitly` testing
+        implicit def GenOneToOneCase[M, P, C]
+        (implicit genOut: P Outputs M, genIn: C Inputs M)
+        = new OneToOneCaseImpl[M, P, C]
+
+        /** For [[implicitly]] testing */
         abstract class OneToOneRCase[P, C] extends Case[P, C]
 
-        implicit def OneToOneR[M, RM, P, C]
-        (implicit
-         genIn: (C Inputs M),
-         genOut: (P Outputs RM),
-         rm: RM <:< R[M]
-        ): OneToOneRCase[P, C]
-        = new OneToOneRCase[P, C] {
+        final class OneToOneRCaseImpl[M, RM, P, C]
+        (implicit genIn: C Inputs M, genOut: P Outputs RM, rm: RM <:< R[M])
+        extends OneToOneRCase[P, C] {
             def apply(producer: P, consumer: C) {
                 DEBUG("[OneToOneR]")
 
@@ -253,43 +268,62 @@ class ArrowGraph {
             }
         }
 
-        // For `implicitly` testing
+        implicit def GenOneToOneRCase[M, RM, P, C]
+        (implicit genIn: C Inputs M, genOut: P Outputs RM, rm: RM <:< R[M])
+        : OneToOneRCase[P, C]
+        = new OneToOneRCaseImpl[M, RM, P, C]
+
+        // =====================================================================
+        //  Broadcast
+        // =====================================================================
+
+        /** For [[implicitly]] testing */
         abstract class BroadcastCase[P, Cs] extends Case[P, Cs]
 
-        implicit def Broadcast[P, Cs, C]
-        (implicit
-         cs: Cs <:< Traversable[C],
-         link: LinkPoly.Case[P, C]
-        ): BroadcastCase[P, Cs]
-        = new BroadcastCase[P, Cs] {
+        final class BroadcastCaseImpl[P, Cs, C]
+        (implicit cs: Cs <:< Traversable[C], link: LinkPoly.Case[P, C])
+        extends BroadcastCase[P, Cs] {
             def apply(producer: P, consumers: Cs) {
                 DEBUG("[Broadcast]")
 
-                cs.apply(consumers).map(consumer => {
+                cs(consumers).map(consumer => {
                     link.apply(producer, consumer)
                 })
             }
         }
 
-        // For `implicitly` testing
-        abstract class CollectCase[Ps, C] extends Case[Ps, C]
+        implicit def Broadcast[P, Cs, C]
+        (implicit cs: Cs <:< Traversable[C], link: LinkPoly.Case[P, C])
+        = new BroadcastCaseImpl[P, Cs, C]
 
-        implicit def Collect[Ps, P, C]
-        (implicit
-         ps: Ps <:< Traversable[P], // Fix P
-         link: LinkPoly.Case[P, C]
-        ): CollectCase[Ps, C]
-        = new CollectCase[Ps, C] {
+        // =====================================================================
+        //  Merge
+        // =====================================================================
+
+        /** For [[implicitly]] testing */
+        abstract class MergeCase[Ps, C] extends Case[Ps, C]
+
+        final class MergeCaseImpl[Ps, P, C]
+        (implicit ps: Ps <:< Traversable[P], link: LinkPoly.Case[P, C])
+        extends MergeCase[Ps, C] {
             def apply(producers: Ps, consumer: C) {
                 DEBUG("[Collect]")
 
-                ps.apply(producers).map(producer => {
+                ps(producers).map(producer => {
                     link(producer, consumer)
                 })
             }
         }
 
-        // For `implicitly` testing
+        implicit def GenMergeCase[Ps, P, C]
+        (implicit ps: Ps <:< Traversable[P], link: LinkPoly.Case[P, C])
+        = new MergeCaseImpl[Ps, P, C]
+
+        // =====================================================================
+        //  Split
+        // =====================================================================
+
+        /** For [[implicitly]] testing */
         abstract class SplitCase[P, Cs] extends Case[P, Cs]
 
         implicit def Split[Os, O, P, I, C, Cs]
@@ -308,14 +342,18 @@ class ArrowGraph {
                 cs(consumers)
                     .toIndexedSeq
                     .zipWithIndex
-                    .map { case (consumer, idx) => {
-                        val outPort = new OutList[O, Os](out, idx)
-                        link(outPort, consumer)
-                    }}
+                    .map { case (consumer, idx) =>
+                        val splitterOut = repr.makeSplitterOut(out, idx)
+                        link(splitterOut, consumer)
+                    }
             }
         }
 
-        // For `implicitly` testing
+        // =====================================================================
+        //  Join
+        // =====================================================================
+
+        /** For [[implicitly]] testing */
         abstract class JoinCase[Ps, C] extends Case[Ps, C]
 
         implicit def Join[Ps, P, O, Is, I, C]
@@ -334,43 +372,18 @@ class ArrowGraph {
                 ps(producers)
                     .toIndexedSeq
                     .zipWithIndex
-                    .map { case (producer, idx) => {
-                        val inPort = new InList[I, Is](in, idx)
-                        link(producer, inPort)
-                    }}
-                genIn(consumer)
+                    .map { case (producer, idx) =>
+                        val joinerIn = repr.makeJoinerIn(in, idx)
+                        link(producer, joinerIn)
+                    }
             }
         }
 
-// There is something wrong with this case.
-// I cannot solve it right now.
-//        abstract class MatchCase[Ps, Cs] extends Case[Ps, Cs]
-//
-//        implicit def Match[Ps, P, Cs, C]
-//        (implicit
-//         ps: Ps <:< Traversable[P],
-//         cs: Cs <:< Traversable[C]
-////         ps_m: Manifest[Ps],
-////         cs_m: Manifest[Cs]
-////         link: LinkPoly.Case[P, C]
-//        ): MatchCase[Ps, Cs]
-//        = {
-////            DEBUG(ps_m)
-////            DEBUG(cs_m)
-//
-//            new MatchCase[Ps, Cs] {
-//                def apply(producers: Ps, consumers: Cs) {
-//                    DEBUG("[Match]")
-//
-//    //                (ps.apply(producers).toVector zip cs.apply(consumers).toVector)
-//    //                    .foreach { case (producer, consumer) => {
-//    //                        link.apply(producer, consumer)
-//    //                    }}
-//                }
-//            }
-//        }
+        // =====================================================================
+        //  Heterogeneous Split
+        // =====================================================================
 
-        // For `implicitly` testing
+        /** For [[implicitly]] testing */
         abstract class HSplitCase[P, Cs <: HList] extends Case[P, Cs]
 
         // Out[HNil] |> HNil
@@ -380,92 +393,110 @@ class ArrowGraph {
         = new HSplitCase[P, Cs] {
             def apply(producer: P, consumers: Cs) {
                 DEBUG("[HSplitNil]")
-
-                val out = genOut(producer)
-
-                // TODO: do nothing here?
             }
         }
 
-        // Out[A :: B :: HNil] |> (In[A] :: In[B] :: HNil)
-        implicit def HSplit[P, Os <: HList, OH, OT <: HList, Cs <: HList, CH, CT <: HList]
+        /**
+          * Out[OH :: OT] |> (In[A] :: IT)
+          */
+        implicit def HSplit[P, Os <: HList, OH, OT <: HList,
+                            Cs <: HList, CH, CT <: HList]
         (implicit
          genOut: (P Outputs Os), // Fix Os
          os: Os <:< (OH :: OT), // Fix OH & OT
          cs: Cs <:< (CH :: CT), // Fix CH & CT
          linkHead: LinkPoly.Case[Out[OH], CH],
-         linkTail: LinkPoly.Case[Out[OT], CT]
-        ): HSplitCase[P, Cs]
+         linkTail: LinkPoly.Case[Out[OT], CT])
+        : HSplitCase[P, Cs]
         = new HSplitCase[P, Cs] {
             def apply(producer: P, consumers: Cs) {
                 DEBUG("[HSplit]")
 
                 val out = genOut(producer)
 
-                // TODO: should I perform a lookup?
-                val outHd = new OutHd[OH, Os](out)
-                val outTl = new OutTl[OT, Os](out)
+                val outHd = repr.makeHSplitterHdOut(out)
+                val outTl = repr.makeHSplitterTlOut(out)
 
-                linkHead.apply(outHd, consumers.head)
-                linkTail.apply(outTl, consumers.tail)
+                linkHead.apply(outHd, cs(consumers).head)
+                linkTail.apply(outTl, cs(consumers).tail)
             }
         }
 
-        // For `implicitly` testing
+        // =====================================================================
+        //  Heterogeneous Join
+        // =====================================================================
+
+        /** For [[implicitly]] testing */
         abstract class HJoinCase[Ps <: HList, C] extends Case[Ps, C]
 
-        implicit def HJoinNil[Ps <: HNil, C, M <: HNil]
-        (implicit genIn: (C Inputs M))
-        : HJoinCase[Ps, C]
-        = new HJoinCase[Ps, C] {
+        /** [[HNil]] |> [[In]]<[[HNil]]> */
+        final class HJoinNilCaseImpl[Ps <: HList, C, M <: HNil]
+        (implicit genIn: C Inputs M)
+        extends HJoinCase[Ps, C] {
             def apply(producers: Ps, consumer: C) {
                 DEBUG("[HJoinNil]")
 
                 val in = genIn(consumer)
-
-                // TODO: do nothing here?
+                // TODO: supply fake input
             }
         }
 
-        implicit def HJoin[Ps <: HList, PH, PT <: HList, M <: HList, MH, MT <: HList, C]
+        implicit def GenHJoinNilCase[Ps <: HNil, C, M <: HNil]
+        (implicit genIn: (C Inputs M))
+        = new HJoinNilCaseImpl[Ps, C, M]
+
+        final class HJoinCaseImpl[Ps <: HList, PH, PT <: HList,
+                                  M <: HList, MH, MT <: HList, C]
+        (implicit
+         genIn: C Inputs M,
+         m: M <:< (MH :: MT),
+         ps: Ps <:< (PH :: PT),
+         linkHead: LinkPoly.Case[PH, In[MH]],
+         linkTail: LinkPoly.Case[PT, In[MT]])
+        extends HJoinCase[Ps, C] {
+            def apply(producers: Ps, consumer: C) {
+                DEBUG("[HJoin]")
+
+                /** [[in]] outputs [[M]] */
+                val in = genIn(consumer)
+
+                val inHd = repr.makeHJoinerHdIn(in)
+                val inTl = repr.makeHJoinerTlIn(in)
+
+                linkHead(ps(producers).head, inHd)
+                linkTail(ps(producers).tail, inTl)
+            }
+        }
+
+        implicit def HJoin[Ps <: HList, PH, PT <: HList,
+                           M <: HList, MH, MT <: HList, C]
         (implicit
          genIn: (C Inputs M),
          m: M <:< (MH :: MT),
          ps: Ps <:< (PH :: PT),
          linkHead: LinkPoly.Case[PH, In[MH]],
-         linkTail: LinkPoly.Case[PT, In[MT]]
-        ): HJoinCase[Ps, C]
-        = new HJoinCase[Ps, C] {
-            def apply(producers: Ps, consumer: C) {
-                DEBUG("[HJoin]")
+         linkTail: LinkPoly.Case[PT, In[MT]])
+        = new HJoinCaseImpl[Ps, PH, PT, M, MH, MT, C]
 
-                val in = genIn(consumer)
-
-                // TODO: should I perform a lookup?
-                val inHd = new InHd[MH, M](in)
-                val inTl = new InTl[MT, M](in)
-
-                linkHead(producers.head, inHd)
-                linkTail(producers.tail, inTl)
-            }
-        }
-
-        // Heterogeneous Match
-        // ===================
+        // =====================================================================
+        //  Heterogeneous Match
+        // =====================================================================
 
         abstract class HMatchCase[Ps <: HList, Cs <: HList] extends Case[Ps, Cs]
 
-        class MatchHNilCase[Ps <: HNil, Cs <: HNil] extends HMatchCase[Ps, Cs] {
+        final class MatchHNilCaseImpl[Ps <: HNil, Cs <: HNil]
+            extends HMatchCase[Ps, Cs] {
+
             def apply(producers: Ps, consumers: Cs) {
                 DEBUG("[HMatchNil]")
             }
         }
 
-        class MatchHListCase[PH, PT <: HList, CH, CT <: HList]
-        (
-            val linkHead: LinkPoly.Case[PH, CH],
-            val linkTail: LinkPoly.Case[PT, CT]
-        ) extends HMatchCase[PH :: PT, CH :: CT] {
+        class MatchHListCaseImpl[PH, PT <: HList, CH, CT <: HList]
+        (val linkHead: LinkPoly.Case[PH, CH],
+         val linkTail: LinkPoly.Case[PT, CT])
+            extends HMatchCase[PH :: PT, CH :: CT] {
+
             def apply(producers: PH :: PT, consumers: CH :: CT) {
                 DEBUG("[HMatch]")
 
@@ -474,15 +505,47 @@ class ArrowGraph {
             }
         }
 
-        implicit def MatchHNil[Ps <: HNil, Cs <: HNil]
-        : MatchHNilCase[Ps, Cs]
-        = new MatchHNilCase[Ps, Cs]
+        implicit def GenMatchHNilCase[Ps <: HNil, Cs <: HNil]
+        : MatchHNilCaseImpl[Ps, Cs]
+        = new MatchHNilCaseImpl[Ps, Cs]
 
-        implicit def MatchHList[PH, PT <: HList, CH, CT <: HList]
+        implicit def GenMatchHListCase[PH, PT <: HList, CH, CT <: HList]
         (implicit
          linkHead: LinkPoly.Case[PH, CH],
-         linkTail: LinkPoly.Case[PT, CT]
-        ): MatchHListCase[PH, PT, CH, CT]
-        = new MatchHListCase[PH, PT, CH, CT](linkHead, linkTail)
+         linkTail: LinkPoly.Case[PT, CT])
+        : MatchHListCaseImpl[PH, PT, CH, CT]
+        = new MatchHListCaseImpl[PH, PT, CH, CT](linkHead, linkTail)
+
+        // =====================================================================
+        //  Match
+        // =====================================================================
+
+        // There is something wrong with this case.
+        // I cannot solve it right now.
+        //        abstract class MatchCase[Ps, Cs] extends Case[Ps, Cs]
+        //
+        //        implicit def Match[Ps, P, Cs, C]
+        //        (implicit
+        //         ps: Ps <:< Traversable[P],
+        //         cs: Cs <:< Traversable[C]
+        ////         ps_m: Manifest[Ps],
+        ////         cs_m: Manifest[Cs]
+        ////         link: LinkPoly.Case[P, C]
+        //        ): MatchCase[Ps, Cs]
+        //        = {
+        ////            DEBUG(ps_m)
+        ////            DEBUG(cs_m)
+        //
+        //            new MatchCase[Ps, Cs] {
+        //                def apply(producers: Ps, consumers: Cs) {
+        //                    DEBUG("[Match]")
+        //
+        //    //                (ps.apply(producers).toVector zip cs.apply(consumers).toVector)
+        //    //                    .foreach { case (producer, consumer) => {
+        //    //                        link.apply(producer, consumer)
+        //    //                    }}
+        //                }
+        //            }
+        //        }
     }
 }
