@@ -26,22 +26,22 @@ package arrow.repr
 
 import arrow._
 
-trait Subscription {
+sealed trait Subscription {
     val from: OutUntyped
     val to: InUntyped
 }
 
-trait SubscriptionFrom[T] extends Subscription
-trait SubscriptionTo[T] extends Subscription
+sealed trait SubscriptionFrom[T] extends Subscription
+sealed trait SubscriptionTo[T] extends Subscription
 
-class SubscriptionImpl[T](val from: Out[T], val to: In[T])
+final class SubscriptionImpl[T](val from: Out[T], val to: In[T])
     extends SubscriptionFrom[T] with SubscriptionTo[T] {
 
     override def toString = s"$from -> $to"
 }
 
-class SubscriptionRImpl[RT, T](val from: Out[RT], val to: In[T])
-                              (implicit rT: RT <:< R[T])
+final class SubscriptionRImpl[RT, T](val from: Out[RT], val to: In[T])
+                                    (implicit rT: RT <:< R[T])
     extends SubscriptionFrom[RT] with SubscriptionTo[T] {
 
     override def toString = s"$from ->R $to"

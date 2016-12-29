@@ -28,9 +28,18 @@ import shapeless._
 
 import collection.mutable.ArrayBuffer
 
-trait OutUntyped
+sealed trait OutUntyped
 
-trait Out[O] extends OutUntyped {
+/**
+  * [[Out]]: an output port
+  *
+  * Cases:
+  *   [[SingleOutputProcessorOut]]
+  *   [[HSplitterHdOut]]
+  *   [[HSplitterTlOut]]
+  *   [[SplitterOut]]
+  */
+sealed trait Out[O] extends OutUntyped {
     def addSubscription(subscription: SubscriptionFrom[O])
 
     def pushTo: ArrayBuffer[SubscriptionFrom[O]]

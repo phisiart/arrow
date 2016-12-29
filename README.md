@@ -16,6 +16,20 @@ Arrow is being reconstructed and open-sourced. The following features are to be 
 - [ ] Parallel Runtime
 - [ ] Distributed Execution Support
 
+## Complete Example
+```scala
+import arrow._
+
+object Example {
+  def main(args: Array[String]) {
+    val graph = new ArrowGraph
+    import graph._
+    
+    val flow = Stream(0, 1, 2) |> ((_: Int) + 1) |> ((_: Int) - 1)
+  }
+}
+```
+
 ## Connection Examples
 ### A Simple Flow
 1. Create a producer node:
@@ -29,6 +43,7 @@ Arrow is being reconstructed and open-sourced. The following features are to be 
     ```scala
     val producer: Int => Int = ...
     ```
+    
 2. Create a consumer node:
 
     ```scala

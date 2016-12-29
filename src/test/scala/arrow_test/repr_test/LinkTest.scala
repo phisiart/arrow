@@ -36,7 +36,7 @@ object OneToOneTest {
         val f = (x: RDD[Int]) => x
         val g = (y: RDD[Int]) => y
 
-        f |> g
+        Stream[RDD[Int]]() |> f |> g
 
         println()
     }

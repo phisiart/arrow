@@ -26,4 +26,12 @@ package arrow.repr
 
 import arrow._
 
-case class FunctionNode[I, O](func: I => O) extends Node[I, O]
+/**
+  * A node without side effects, represented by a scala function
+  * @param func The function.
+  * @tparam I The input type.
+  * @tparam O The output type.
+  */
+case class FunctionNode[I, O](func: I => O) extends Node[I, O] {
+    override def apply(input: I): O = func(input)
+}

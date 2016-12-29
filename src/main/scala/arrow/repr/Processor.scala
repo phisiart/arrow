@@ -31,15 +31,25 @@ import scala.collection.mutable.ArrayBuffer
 
 trait Processor
 
-/** [[NodeProcessor]] */
-
-trait SingleInputProcessor[I] extends Processor {
+sealed trait SingleInputProcessor[I] extends Processor {
     val pullFrom: collection.mutable.ArrayBuffer[SubscriptionTo[I]]
 }
 
-trait SingleOutputProcessor[O] extends Processor {
+sealed trait SingleOutputProcessor[O] extends Processor {
     val pushTo: collection.mutable.ArrayBuffer[SubscriptionFrom[O]]
 }
+
+/**
+  * [[StreamProcessor]]
+  */
+
+final case class StreamProcessor[T](stream: Stream[T]) extends SingleOutputProcessor[T] {
+    val pushTo = collection.mutable.ArrayBuffer.empty[SubscriptionFrom[T]]
+}
+
+/**
+  * [[NodeProcessor]]
+  */
 
 final case class NodeProcessor[I, O](node: Node[I, O], id: Int)
     extends SingleInputProcessor[I] with SingleOutputProcessor[O] {
@@ -51,7 +61,9 @@ final case class NodeProcessor[I, O](node: Node[I, O], id: Int)
     val pushTo = collection.mutable.ArrayBuffer.empty[SubscriptionFrom[O]]
 }
 
-/** [[Splitter]] */
+/**
+  * [[Splitter]]: An input, a list of outputs
+  */
 
 final case class Splitter[O, Os](out: Out[Os])
     extends SingleInputProcessor[Os] {
@@ -96,11 +108,11 @@ final case class Joiner[I, Is](in: In[Is]) extends SingleOutputProcessor[Is] {
 
 /** [[HSplitter]] */
 
-trait HSplitterOH[OH] extends Processor {
+sealed trait HSplitterOH[OH] extends Processor {
     val pushToHd: ArrayBuffer[SubscriptionFrom[OH]]
 }
 
-trait HSplitterOT[OT <: HList] extends Processor {
+sealed trait HSplitterOT[OT <: HList] extends Processor {
     val pushToTl: ArrayBuffer[SubscriptionFrom[OT]]
 }
 
@@ -126,11 +138,11 @@ final case class HSplitter[OH, OT <: HList, Os <: HList]
   *     +-------------+
   * */
 
-trait HJoinerIH[IH] extends Processor {
+sealed trait HJoinerIH[IH] extends Processor {
     val pullFromHd: ArrayBuffer[SubscriptionTo[IH]]
 }
 
-trait HJoinerIT[IT <: HList] extends Processor {
+sealed trait HJoinerIT[IT <: HList] extends Processor {
     val pullFromTl: ArrayBuffer[SubscriptionTo[IT]]
 }
 

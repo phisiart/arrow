@@ -272,7 +272,7 @@ object SplitTest {
         val g = identity[T] _
         val gs: Vector[T => T] = Vector(g, g)
 
-        val x = new Node[T, IndexedSeq[T]] {
+        val x = new Node[T, List[T]] {
             def apply(x: T) = f(x)
         }
 
@@ -305,7 +305,7 @@ object SplitRTest {
         val g = identity[T] _
         val gs = Vector(g, g)
 
-        val x = new Node[T, IndexedSeq[R[T]]] {
+        val x = new Node[T, List[R[T]]] {
             def apply(x: T) = f(x)
         }
 
@@ -499,7 +499,7 @@ object HSplitRTest {
         val graph = new ArrowGraph
         import graph._
 
-        val f = (x: Int) => Push(1) :: 3.0 :: HNil
+        val f = (x: Int) => Push(1) :: Push(3.0) :: HNil
 
         val g0 = identity[Int] _
         val g1 = identity[Double] _

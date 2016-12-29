@@ -28,9 +28,18 @@ import shapeless._
 
 import collection.mutable.ArrayBuffer
 
-trait InUntyped
+sealed trait InUntyped
 
-trait In[I] extends InUntyped {
+/**
+  * [[In]]: An input port
+  *
+  * Cases:
+  *   [[SingleInputProcessorIn]]
+  *   [[HJoinerHdIn]]
+  *   [[HJoinerTlIn]]
+  *   [[JoinerIn]]
+  */
+sealed trait In[I] extends InUntyped {
     def addSubscription(subscription: SubscriptionTo[I])
 
     def pullFrom: ArrayBuffer[SubscriptionTo[I]]

@@ -22,16 +22,41 @@
  * THE SOFTWARE.
  */
 
-package arrow
+package arrow.runtime
 
-sealed trait R[T]
+import arrow._
 
-final case class Push[T](value: T) extends R[T]
+final case class SourceProcessorRunnable[T]
+(stream: Stream[T],
+ outputChannels: Array[ChannelIn[T]]) extends Runnable {
 
-final case class Put[T](value: T) extends R[T]
+    override def run(): Unit = {
 
-final case class Finish[T]() extends R[T]
+    }
+}
 
-final case class Empty[T]() extends R[T]
+final case class NodeProcessorRunnable[I, O]
+(node: Node[I, O],
+ inputChannel: Channel[I],
+ outputChannels: Array[ChannelIn[O]]) extends Runnable {
 
-final case class Break[T]() extends R[T]
+    override def run(): Unit = {
+        while (true) {
+            val input = this.inputChannel.pull()
+            input match {
+                case Push(value) =>
+                    val output = this.node.apply(value)
+                    val msg = Push(output)
+                    outputChannels.foreach(_.push(msg))
+
+                case _ =>
+                    throw new NotImplementedError()
+            }
+        }
+    }
+}
+
+final case class SplitterRunnable[O, Os]
+() {
+
+}

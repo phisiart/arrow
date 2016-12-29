@@ -26,7 +26,9 @@ package arrow
 
 import arrow.repr._
 
-trait Node[I, O] extends NodeUntyped
+trait Node[I, O] extends NodeUntyped {
+    def apply(input: I): O
+}
 
 object Node {
     def apply[I, O](func: I => O): Node[I, O] = FunctionNode(func)

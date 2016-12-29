@@ -29,11 +29,11 @@ import shapeless._
 import collection.mutable.ArrayBuffer
 
 class Repr {
-    def insertSubscription(subscription: Subscription) = {
+    def insertSubscription(subscription: Subscription): Unit = {
         subscriptions += subscription
     }
 
-    def draw() = {
+    def draw(): Unit = {
         GraphDrawer.draw(this.processors, this.subscriptions)
     }
 
@@ -41,6 +41,8 @@ class Repr {
 
     private val nodeToId = collection.mutable.Map.empty[NodeUntyped, Int]
     private val processors = ArrayBuffer.empty[Processor]
+
+    private val sources = ArrayBuffer.empty[Stream[_]]
 
     /**
       * Given a node, ensure it is recorded in the [[Repr]], and return the
@@ -58,6 +60,25 @@ class Repr {
             val processor = NodeProcessor(node, id)
             this.processors.append(processor)
             processor
+        }
+    }
+
+    private def streamToProcessor[O](stream: Stream[O])
+    : StreamProcessor[O] = {
+        this.processors
+            .filter(_.isInstanceOf[StreamProcessor[_]])
+            .map(_.asInstanceOf[StreamProcessor[_]])
+            .map(x => (x, x.stream))
+            .find(_._2 == stream)
+        match {
+            case Some((streamProcessor, _)) =>
+                streamProcessor.asInstanceOf[StreamProcessor[O]]
+
+            case _ =>
+                val id = this.processors.length
+                val processor = StreamProcessor(stream)
+                this.processors.append(processor)
+                processor
         }
     }
 
@@ -87,8 +108,19 @@ class Repr {
     /**
       * Will create subscription and record it.
       */
-    def insertSubscription[T](out: Out[T], in: In[T]) = {
+    def insertSubscription[T](out: Out[T], in: In[T]): Unit = {
         val subscription = new SubscriptionImpl[T](out, in)
+        this.subscriptions += subscription
+
+        out.addSubscription(subscription)
+        in.addSubscription(subscription)
+    }
+
+    /**
+      * Will create subscription and record it.
+      */
+    def insertSubscriptionR[T, RT](out: Out[RT], in: In[T])(implicit rt: RT <:< R[T]): Unit = {
+        val subscription = new SubscriptionRImpl[RT, T](out, in)
         this.subscriptions += subscription
 
         out.addSubscription(subscription)
@@ -223,7 +255,12 @@ class Repr {
       */
 
     def makeNodeOut[I, O](node: Node[I, O]): SingleOutputProcessorOut[O] = {
-        val processor = nodeToProcessor(node)
+        val processor = this.nodeToProcessor(node)
+        new SingleOutputProcessorOut[O](processor)
+    }
+
+    def makeStreamOut[O](stream: Stream[O]): SingleOutputProcessorOut[O] = {
+        val processor = this.streamToProcessor(stream)
         new SingleOutputProcessorOut[O](processor)
     }
 

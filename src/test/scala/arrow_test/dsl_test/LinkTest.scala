@@ -15,6 +15,18 @@ package arrow_test.dsl_test
 import arrow._
 import shapeless._
 
+object Example {
+    def main(args: Array[String]) {
+        val graph = new ArrowGraph
+        import graph._
+
+        val flow = Stream(0, 1, 2) |>
+            ((x: Int) => x + 1) |>
+            ((x: Int) => x - 1)
+
+    }
+}
+
 object OneToOneChainTest {
     def main(args: Array[String]) {
         val graph = new ArrowGraph
@@ -80,7 +92,15 @@ object ComplexFlowTest {
         val query = (id: Int) => {
             val name = "John Smith"
             val age = 20
-            name :: age :: HNil
+            HList(name, age)
+//            name :: age :: HNil
         }
+
+        val name = (name: String) => name
+        val age = (age: Int) => age
+
+        val combine = (in: String :: Int :: HNil) => ()
+
+        query |> HList(name, age) |> combine
     }
 }

@@ -33,21 +33,32 @@ class ArrowGraph {
     /** The intermediate representation of the graph. */
     val repr = new Repr
 
-    def draw() = {
+    def draw(): Unit = {
         repr.draw()
     }
 
     /**
       * The evidence that [[P]] produces an output of type [[O]].
+      *
+      * Cases:
+      *   [[FunIsOut]]
+      *   [[NodeIsOut]]
+      *   [[OutIsOut]]
+      *   [[StreamIsOut]]
       */
-    abstract class Outputs[P, O] {
+    abstract sealed class Outputs[P, O] {
         def apply(p: P): Out[O]
     }
 
     /**
       * The evidence that [[C]] consumes an input of type [[I]].
+      *
+      * Cases:
+      *   [[FunIsIn]]
+      *   [[InIsIn]]
+      *   [[NodeIsIn]]
       */
-    abstract class Inputs[C, I] {
+    abstract sealed class Inputs[C, I] {
         def apply(c: C): In[I]
     }
 
@@ -138,8 +149,8 @@ class ArrowGraph {
         def apply(p: S): Out[O] = {
             println("StreamIsOut")
 
-            // TODO: implement this
-            null
+            val stream = s(p)
+            repr.makeStreamOut(stream)
         }
     }
 
@@ -265,8 +276,7 @@ class ArrowGraph {
 
                 val out = genOut(producer)
                 val in = genIn(consumer)
-                val subscription = new SubscriptionRImpl[RM, M](out, in)
-                repr.insertSubscription(subscription)
+                repr.insertSubscriptionR(out, in)
             }
         }
 
@@ -321,7 +331,10 @@ class ArrowGraph {
         }
 
         implicit def GenMergeCase[Ps, P, C, I]
-        (implicit ps: Ps <:< Traversable[P], c: C Inputs I, link: LinkPoly.Case[P, C])
+        (implicit
+         ps: Ps <:< Traversable[P],
+         c: C Inputs I,
+         link: LinkPoly.Case[P, C])
         = new MergeCaseImpl[Ps, P, C, I]
 
         // =====================================================================
