@@ -672,18 +672,13 @@ object HMatchTest {
 }
 
 object RecursiveHSplitTest {
-    def DummyIn[I](): In[I] = new In[I] {
-        override def pullFrom = null
-        override def addSubscription(subscription: SubscriptionTo[I]) {}
-    }
-
     def main(args: Array[String]) {
         val graph = new ArrowGraph
         import graph._
 
         val f = (x: Int) => 1 :: (1 :: 1 :: HNil) :: HNil
 
-        val in = DummyIn[Int]()
+        val in = (x: Int) => ()
         val gs = in :: (in :: identity[Int] _ :: HNil) :: HNil
 
         f |> gs
