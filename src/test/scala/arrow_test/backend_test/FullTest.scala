@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright (c) 2016 Zhixun Tan
+ * Copyright (c) 2017 Zhixun Tan
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,20 +22,21 @@
  * THE SOFTWARE.
  */
 
-package arrow
+package arrow_test.backend_test
 
-sealed trait R[T]
+import arrow._
 
-sealed trait Outputable[T] extends R[T]
+object FullTest {
+    def main(args: Array[String]): Unit = {
+        val graph = new ArrowGraph
+        import graph._
 
-sealed trait Inputable[T] extends R[T]
+        val node = new Node[Int, Int] {
+            override def apply(input: Int): Int = input
+        }
 
-final case class Push[T](value: T) extends Outputable[T]
+        Stream(1, 2, 3) |> node
 
-final case class Put[T](value: T) extends Outputable[T]
-
-final case class Finish[T]() extends Outputable[T]
-
-final case class Empty[T]() extends Outputable[T]
-
-final case class Break[T]() extends Outputable[T]
+        run(node)
+    }
+}

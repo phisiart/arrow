@@ -51,7 +51,7 @@ object GraphDrawer {
         processor.toString
     }
 
-    def getProcessorShape(processor: Processor) = {
+    def getProcessorShape(processor: Processor): String = {
         processor match {
             case NodeProcessor(node, id) =>
                 "circle"
@@ -71,7 +71,7 @@ object GraphDrawer {
     }
 
 
-    def draw(processors: Iterable[Processor], subscriptions: Iterable[Subscription]) = {
+    def draw(processors: Iterable[Processor], subscriptions: Iterable[Subscription]): Unit = {
         val builder = StringBuilder.newBuilder
 
         builder.append(s"""digraph "Graph" {\n""")

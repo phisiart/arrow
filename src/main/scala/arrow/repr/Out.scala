@@ -51,33 +51,36 @@ final case class SingleOutputProcessorOut[O]
 (processor: SingleOutputProcessor[O]) extends Out[O] {
     override def toString = s"${this.processor}.out"
 
-    override def addSubscription(subscription: SubscriptionFrom[O]) = {
+    override def addSubscription(subscription: SubscriptionFrom[O]): Unit = {
         this.processor.pushTo.append(subscription)
     }
 
-    override def pushTo: ArrayBuffer[SubscriptionFrom[O]] = this.processor.pushTo
+    override def pushTo: ArrayBuffer[SubscriptionFrom[O]] =
+        this.processor.pushTo
 }
 
 final case class HSplitterHdOut[OH, OT <: HList, Os <: HList]
 (hSplitter: HSplitter[OH, OT, Os]) extends Out[OH] {
     override def toString = s"${this.hSplitter}.hd"
 
-    override def addSubscription(subscription: SubscriptionFrom[OH]) = {
+    override def addSubscription(subscription: SubscriptionFrom[OH]): Unit = {
         this.hSplitter.pushToHd.append(subscription)
     }
 
-    override def pushTo: ArrayBuffer[SubscriptionFrom[OH]] = this.hSplitter.pushToHd
+    override def pushTo: ArrayBuffer[SubscriptionFrom[OH]] =
+        this.hSplitter.pushToHd
 }
 
 final case class HSplitterTlOut[OH, OT <: HList, O <: HList]
 (hSplitter: HSplitter[OH, OT, O]) extends Out[OT] {
     override def toString = s"${this.hSplitter}.tl"
 
-    override def addSubscription(subscription: SubscriptionFrom[OT]) = {
+    override def addSubscription(subscription: SubscriptionFrom[OT]): Unit = {
         this.hSplitter.pushToTl.append(subscription)
     }
 
-    override def pushTo: ArrayBuffer[SubscriptionFrom[OT]] = this.hSplitter.pushToTl
+    override def pushTo: ArrayBuffer[SubscriptionFrom[OT]] =
+        this.hSplitter.pushToTl
 }
 
 final case class SplitterOut[O, Os]
@@ -87,9 +90,10 @@ final case class SplitterOut[O, Os]
 
     override def toString = s"$splitter.out[$idx]"
 
-    override def addSubscription(subscription: SubscriptionFrom[O]) = {
+    override def addSubscription(subscription: SubscriptionFrom[O]): Unit = {
         this.splitter.pushTos(idx).append(subscription)
     }
 
-    override def pushTo: ArrayBuffer[SubscriptionFrom[O]] = this.splitter.pushTos(idx)
+    override def pushTo: ArrayBuffer[SubscriptionFrom[O]] =
+        this.splitter.pushTos(idx)
 }

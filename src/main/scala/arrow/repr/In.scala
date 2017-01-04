@@ -43,6 +43,19 @@ sealed trait In[I] extends InUntyped {
     def addSubscription(subscription: SubscriptionTo[I])
 
     def pullFrom: ArrayBuffer[SubscriptionTo[I]]
+
+    def visit[R[_]](visitor: InVisitor[R]): R[I]
+
+//    def chan: Channel[I]
+
+//    val runtimeInfo: RuntimeInInfo[I]
+}
+
+trait InVisitor[R[_]] {
+    def VisitSingleInputProcessorIn[I](in: SingleInputProcessorIn[I]): R[I]
+    def VisitHJoinerHdIn[IH, IT <: HList, I <: HList](in: HJoinerHdIn[IH, IT, I]): R[IH]
+    def VisitHJoinerTlIn[IH, IT <: HList, I <: HList](in: HJoinerTlIn[IH, IT, I]): R[IT]
+    def VisitJoinerIn[I, Is](in: JoinerIn[I, Is]): R[I]
 }
 
 /** All types of [[In]]: */
@@ -51,33 +64,60 @@ final case class SingleInputProcessorIn[I]
 (processor: SingleInputProcessor[I]) extends In[I] {
     override def toString = s"${this.processor}.in"
 
-    override def addSubscription(subscription: SubscriptionTo[I]) = {
+    override def addSubscription(subscription: SubscriptionTo[I]): Unit = {
         this.processor.pullFrom.append(subscription)
     }
 
-    override def pullFrom: ArrayBuffer[SubscriptionTo[I]] = this.processor.pullFrom
+    override def pullFrom: ArrayBuffer[SubscriptionTo[I]] =
+        this.processor.pullFrom
+
+//    override val chan: Channel[I] = processor.inputChan
+
+    // TODO: implement this
+//    override val runtimeInfo: SingleInputProcessorInRuntimeInfo[I] = null
+
+    override def visit[R[_]](visitor: InVisitor[R]): R[I] =
+        visitor.VisitSingleInputProcessorIn[I](this)
 }
 
 final case class HJoinerHdIn[IH, IT <: HList, I <: HList]
 (hJoiner: HJoiner[IH, IT, I]) extends In[IH] {
     override def toString = s"$hJoiner.hd"
 
-    override def addSubscription(subscription: SubscriptionTo[IH]) = {
+    override def addSubscription(subscription: SubscriptionTo[IH]): Unit = {
         this.hJoiner.pullFromHd.append(subscription)
     }
 
-    override def pullFrom: ArrayBuffer[SubscriptionTo[IH]] = this.hJoiner.pullFromHd
+    override def pullFrom: ArrayBuffer[SubscriptionTo[IH]] =
+        this.hJoiner.pullFromHd
+
+//    override val chan: Channel[IH] = hJoiner.HInputChan
+
+    // TODO: implement this
+//    override val runtimeInfo: HJoinerHdInRuntimeInfo[IH] = null
+
+    override def visit[R[_]](visitor: InVisitor[R]): R[IH] =
+        visitor.VisitHJoinerHdIn(this)
 }
 
 final case class HJoinerTlIn[IH, IT <: HList, I <: HList]
 (hJoiner: HJoiner[IH, IT, I]) extends In[IT] {
     override def toString = s"$hJoiner.tl"
 
-    override def addSubscription(subscription: SubscriptionTo[IT]) = {
+    override def addSubscription(subscription: SubscriptionTo[IT]): Unit = {
         this.hJoiner.pullFromTl.append(subscription)
     }
 
-    override def pullFrom: ArrayBuffer[SubscriptionTo[IT]] = this.hJoiner.pullFromTl
+    override def pullFrom: ArrayBuffer[SubscriptionTo[IT]] =
+        this.hJoiner.pullFromTl
+
+//    override val chan: Channel[IT] = hJoiner.TInputChan
+
+    // TODO: implement this
+//    override val runtimeInfo: HJoinerTlInRuntimeInfo[IT] = null
+
+    override def visit[R[_]](visitor: InVisitor[R]): R[IT] =
+        visitor.VisitHJoinerTlIn(this)
 }
 
 final case class JoinerIn[I, Is]
@@ -86,9 +126,18 @@ final case class JoinerIn[I, Is]
 
     override def toString = s"${this.joiner}.in[$idx]"
 
-    override def addSubscription(subscription: SubscriptionTo[I]) = {
+    override def addSubscription(subscription: SubscriptionTo[I]): Unit = {
         this.joiner.pullFroms(idx).append(subscription)
     }
 
-    override def pullFrom: ArrayBuffer[SubscriptionTo[I]] = this.joiner.pullFroms(idx)
+    override def pullFrom: ArrayBuffer[SubscriptionTo[I]] =
+        this.joiner.pullFroms(idx)
+
+//    override def chan: Channel[I] = joiner.getInputChans(idx)
+
+    // TODO: implement this
+//    override val runtimeInfo: JoinerInRuntimeInfo[I] = null
+
+    override def visit[R[_]](visitor: InVisitor[R]): R[I] =
+        visitor.VisitJoinerIn(this)
 }

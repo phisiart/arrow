@@ -24,7 +24,10 @@
 
 package arrow
 
+import java.util.concurrent.Future
+
 import arrow.repr._
+import arrow.runtime._
 import shapeless._
 
 import scala.language.implicitConversions
@@ -99,7 +102,7 @@ class ArrowGraph {
         def apply(p: I => O): Out[O] = {
             println("FunctionToOut")
 
-            repr.makeFunctionOut(p)
+            repr.getFunctionOut(p)
         }
     }
 
@@ -132,7 +135,7 @@ class ArrowGraph {
             println("NodeIsOut")
 
             val node = n(p)
-            repr.makeNodeOut(node)
+            repr.getNodeOut(node)
         }
     }
 
@@ -150,7 +153,7 @@ class ArrowGraph {
             println("StreamIsOut")
 
             val stream = s(p)
-            repr.makeStreamOut(stream)
+            repr.getStreamOut(stream)
         }
     }
 
@@ -160,17 +163,32 @@ class ArrowGraph {
     = new StreamIsOut[O, S]
 
     case class LinkableWrapper[T](linkable: T) {
-        def |>[C](consumer: C)(implicit linkPoly: LinkPoly.Case[T, C]) = {
+        def |>[C](consumer: C)(implicit linkPoly: LinkPoly.Case[T, C]): linkPoly.R = {
             linkPoly.apply(this.linkable, consumer)
         }
 
-        def <|[P](producer: P)(implicit linkPoly: LinkPoly.Case[P, T]) = {
+        def <|[P](producer: P)(implicit linkPoly: LinkPoly.Case[P, T]): linkPoly.R = {
             linkPoly.apply(producer, this.linkable)
         }
     }
 
     implicit def GenLinkableWrapper[T](linkable: T): LinkableWrapper[T] =
         LinkableWrapper(linkable)
+
+    def run[T, P]
+    (producer: P)
+    (implicit genOut: P Outputs T): Future[IndexedSeq[T]] = {
+        val out = genOut(producer)
+        val in = repr.makeDrainProcessorIn[T]()
+        repr.insertSubscription(out, in)
+
+        val runtime = new Runtime(this.repr)
+
+        runtime.run()
+
+        // TODO: create Future
+        null
+    }
 
     /**
       * Objects encapsulated with [[Flow]] should also be able to link.
@@ -361,7 +379,7 @@ class ArrowGraph {
                     .toIndexedSeq
                     .zipWithIndex
                     .map { case (consumer, idx) =>
-                        val splitterOut = repr.makeSplitterOut(out, idx)
+                        val splitterOut = repr.getSplitterOut(out, idx)
                         link(splitterOut, consumer)
                     }
             }
@@ -432,8 +450,8 @@ class ArrowGraph {
 
                 val out = genOut(producer)
 
-                val outHd = repr.makeHSplitterHdOut(out)
-                val outTl = repr.makeHSplitterTlOut(out)
+                val outHd = repr.getHSplitterHdOut(out)
+                val outTl = repr.getHSplitterTlOut(out)
 
                 linkHead.apply(outHd, cs(consumers).head)
                 linkTail.apply(outTl, cs(consumers).tail)
@@ -541,8 +559,10 @@ class ArrowGraph {
         abstract class MatchCase[Ps, Cs] extends Case[Ps, Cs]
 
         final class MatchCaseImpl[Ps, P, Cs, C]
-        (implicit ps: Ps <:< Traversable[P], cs: Cs <:< Traversable[C], link: LinkPoly.Case[P, C])
-            extends MatchCase[Ps, Cs] {
+        (implicit
+         ps: Ps <:< Traversable[P],
+         cs: Cs <:< Traversable[C],
+         link: LinkPoly.Case[P, C]) extends MatchCase[Ps, Cs] {
 
             DEBUG("[Match]")
 
@@ -555,7 +575,10 @@ class ArrowGraph {
         }
 
         implicit def Match[Ps, P, Cs, C]
-        (implicit ps: Ps <:< Traversable[P], cs: Cs <:< Traversable[C], link: LinkPoly.Case[P, C])
+        (implicit
+         ps: Ps <:< Traversable[P],
+         cs: Cs <:< Traversable[C],
+         link: LinkPoly.Case[P, C])
         : MatchCaseImpl[Ps, P, Cs, C]
         = new MatchCaseImpl[Ps, P, Cs, C]
     }

@@ -24,30 +24,42 @@
 
 package arrow.runtime
 
+import java.util.concurrent.Callable
+
 import arrow._
 
+import scala.collection.mutable.ArrayBuffer
+
 final case class SourceProcessorRunnable[T]
-(stream: Stream[T],
- outputChannels: Array[ChannelIn[T]]) extends Runnable {
-
+(stream: Stream[T], outputChannels: IndexedSeq[ChannelIn[T]]) extends Runnable {
     override def run(): Unit = {
-
+        var curr = stream
+        while (curr.nonEmpty) {
+            outputChannels.foreach(_.push(Push[T](curr.head)))
+            curr = curr.tail
+        }
+        outputChannels.foreach(_.push(Finish[T]()))
     }
 }
 
-final case class NodeProcessorRunnable[I, O]
+final case class NodeRunnable[I, O]
 (node: Node[I, O],
  inputChannel: Channel[I],
- outputChannels: Array[ChannelIn[O]]) extends Runnable {
+ outputChannels: IndexedSeq[ChannelIn[O]]) extends Runnable {
 
     override def run(): Unit = {
-        while (true) {
+        var running = true
+
+        while (running) {
             val input = this.inputChannel.pull()
             input match {
                 case Push(value) =>
                     val output = this.node.apply(value)
-                    val msg = Push(output)
-                    outputChannels.foreach(_.push(msg))
+                    outputChannels.foreach(_.push(Push(output)))
+
+                case Finish() =>
+                    outputChannels.foreach(_.push(Finish()))
+                    running = false
 
                 case _ =>
                     throw new NotImplementedError()
@@ -56,7 +68,34 @@ final case class NodeProcessorRunnable[I, O]
     }
 }
 
-final case class SplitterRunnable[O, Os]
-() {
+final case class SplitterRunnable[O, Os]() {
 
+}
+
+final case class DrainProcessorCallable[T](inputChannel: Channel[T])
+    extends Callable[IndexedSeq[T]] {
+
+    val buf: ArrayBuffer[T] = ArrayBuffer.empty[T]
+
+    override def call(): IndexedSeq[T] = {
+        var running = true
+
+        while (running) {
+            val elem = inputChannel.pull()
+            elem match {
+                case Push(value) =>
+                    println(s"New output value: $elem.")
+                    buf.append(value)
+
+                case Finish() =>
+                    println("Finished.")
+                    running = false
+
+                case _ =>
+                    throw new NotImplementedError()
+            }
+        }
+
+        buf
+    }
 }

@@ -28,6 +28,22 @@ import arrow._
 
 import scala.collection.mutable
 
+/**
+  * Node[_, T] |> Node[T, _]
+  *
+  * +------------+  Push(T)  +------------+  Push(T)  +------------+
+  * | Node[_, T] | --------> | Channel[T] | --------> | Node[T, _] |
+  * +------------+           +------------+           +------------+
+  *
+  *
+  * Node[_, R[T] ] |> Node[T, _]
+  *
+  * +----------------+  Push(R[T])  +------------+  Push(T)  +------------+
+  * | Node[_, R[T] ] | -----------> | Channel[T] | --------> | Node[T, _] |
+  * +----------------+              +------------+           +------------+
+  *
+  */
+
 sealed trait ChannelIn[T] {
     def push(msg: R[T]): Unit
 }
@@ -38,7 +54,7 @@ final case class ChannelInImpl[T](chan: Channel[T]) extends ChannelIn[T] {
     }
 }
 
-final class ChannelInRImpl[T, RT](chan: Channel[T])(implicit rt: RT <:< R[T]) extends ChannelIn[RT] {
+final case class ChannelInRImpl[T, RT](chan: Channel[T])(implicit rt: RT <:< R[T]) extends ChannelIn[RT] {
     override def push(msg: R[RT]): Unit = {
         // TODO: modify this
         chan.push(msg match {
@@ -71,6 +87,10 @@ class Channel[T] {
                     wait()
                 }
 
+                buf.enqueue(msg)
+                notifyAll()
+
+            case Finish() =>
                 buf.enqueue(msg)
                 notifyAll()
 

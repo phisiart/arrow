@@ -29,20 +29,16 @@ import shapeless._
 import collection.mutable.ArrayBuffer
 
 class Repr {
-    def insertSubscription(subscription: Subscription): Unit = {
-        subscriptions += subscription
-    }
-
     def draw(): Unit = {
         GraphDrawer.draw(this.processors, this.subscriptions)
     }
 
-    val subscriptions = collection.mutable.ArrayBuffer.empty[Subscription]
+    val subscriptions: ArrayBuffer[Subscription] =
+        collection.mutable.ArrayBuffer.empty[Subscription]
 
     private val nodeToId = collection.mutable.Map.empty[NodeUntyped, Int]
-    private val processors = ArrayBuffer.empty[Processor]
 
-    private val sources = ArrayBuffer.empty[Stream[_]]
+    val processors: ArrayBuffer[Processor] = ArrayBuffer.empty[Processor]
 
     /**
       * Given a node, ensure it is recorded in the [[Repr]], and return the
@@ -64,23 +60,31 @@ class Repr {
     }
 
     private def streamToProcessor[O](stream: Stream[O])
-    : StreamProcessor[O] = {
+    : SourceProcessor[O] = {
         this.processors
-            .filter(_.isInstanceOf[StreamProcessor[_]])
-            .map(_.asInstanceOf[StreamProcessor[_]])
+            .filter(_.isInstanceOf[SourceProcessor[_]])
+            .map(_.asInstanceOf[SourceProcessor[_]])
             .map(x => (x, x.stream))
             .find(_._2 == stream)
         match {
             case Some((streamProcessor, _)) =>
-                streamProcessor.asInstanceOf[StreamProcessor[O]]
+                streamProcessor.asInstanceOf[SourceProcessor[O]]
 
             case _ =>
                 val id = this.processors.length
-                val processor = StreamProcessor(stream)
+                val processor = SourceProcessor(stream)
                 this.processors.append(processor)
                 processor
         }
     }
+
+    private def makeDrainProcessor[T](): DrainProcessor[T] = {
+        val processor = DrainProcessor[T]()
+        this.processors.append(processor)
+        processor
+    }
+
+
 
     /**
       * Given a function, ensure it is recorded in the [[Repr]], and return the
@@ -142,6 +146,14 @@ class Repr {
     def makeNodeIn[I, O](node: Node[I, O]): SingleInputProcessorIn[I] = {
         val processor = nodeToProcessor(node)
         new SingleInputProcessorIn[I](processor)
+    }
+
+    /**
+      * Create a new drain processor input port.
+      */
+    def makeDrainProcessorIn[T](): SingleInputProcessorIn[T] = {
+        val processor = makeDrainProcessor[T]()
+        new SingleInputProcessorIn[T](processor)
     }
 
     /**
@@ -254,22 +266,22 @@ class Repr {
       * ========================================================================
       */
 
-    def makeNodeOut[I, O](node: Node[I, O]): SingleOutputProcessorOut[O] = {
+    def getNodeOut[I, O](node: Node[I, O]): SingleOutputProcessorOut[O] = {
         val processor = this.nodeToProcessor(node)
         new SingleOutputProcessorOut[O](processor)
     }
 
-    def makeStreamOut[O](stream: Stream[O]): SingleOutputProcessorOut[O] = {
+    def getStreamOut[O](stream: Stream[O]): SingleOutputProcessorOut[O] = {
         val processor = this.streamToProcessor(stream)
         new SingleOutputProcessorOut[O](processor)
     }
 
-    def makeFunctionOut[I, O](func: I => O): SingleOutputProcessorOut[O] = {
+    def getFunctionOut[I, O](func: I => O): SingleOutputProcessorOut[O] = {
         val processor = this.functionToProcessor(func)
         new SingleOutputProcessorOut[O](processor)
     }
 
-    def makeHSplitterHdOut[OH, OT <: HList, O <: HList]
+    def getHSplitterHdOut[OH, OT <: HList, O <: HList]
     (out: Out[O])
     (implicit o: O <:< (OH :: OT))
     : HSplitterHdOut[OH, OT, O] = {
@@ -296,7 +308,7 @@ class Repr {
         }
     }
 
-    def makeHSplitterTlOut[OH, OT <: HList, O <: HList]
+    def getHSplitterTlOut[OH, OT <: HList, O <: HList]
     (out: Out[O])
     (implicit o: O <:< (OH :: OT))
     : HSplitterTlOut[OH, OT, O] = {
@@ -323,7 +335,11 @@ class Repr {
         }
     }
 
-    def makeSplitterOut[O, Os]
+    /**
+      * For an output port of type [[Os]], get an output port of type [[O]],
+      * given the index.
+      */
+    def getSplitterOut[O, Os]
     (out: Out[Os], idx: Int)
     (implicit os: Os <:< Traversable[O])
     : SplitterOut[O, Os] = {

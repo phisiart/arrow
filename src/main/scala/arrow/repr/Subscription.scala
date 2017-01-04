@@ -25,24 +25,44 @@
 package arrow.repr
 
 import arrow._
+import arrow.runtime._
 
 sealed trait Subscription {
     val from: OutUntyped
     val to: InUntyped
 }
 
-sealed trait SubscriptionFrom[T] extends Subscription
+trait SubscriptionFromVisitor[R[_]] {
+    def VisitSubscriptionImpl[T](subscription: SubscriptionImpl[T]): R[T]
+    def VisitSubscriptionRImpl[RT, T](subscription: SubscriptionRImpl[RT, T]): R[RT]
+}
+
+sealed trait SubscriptionFrom[T] extends Subscription {
+    def Visit[R[_]](visitor: SubscriptionFromVisitor[R]): R[T]
+//    val chanIn: ChannelIn[T]
+}
+
 sealed trait SubscriptionTo[T] extends Subscription
 
 final class SubscriptionImpl[T](val from: Out[T], val to: In[T])
     extends SubscriptionFrom[T] with SubscriptionTo[T] {
 
     override def toString = s"$from -> $to"
+
+//    override val chanIn: ChannelIn[T] = ChannelInImpl(to.chan)
+
+    override def Visit[R[_]](visitor: SubscriptionFromVisitor[R]): R[T] =
+        visitor.VisitSubscriptionImpl(this)
 }
 
 final class SubscriptionRImpl[RT, T](val from: Out[RT], val to: In[T])
-                                    (implicit rT: RT <:< R[T])
+                                    (implicit val rT: RT <:< R[T])
     extends SubscriptionFrom[RT] with SubscriptionTo[T] {
 
     override def toString = s"$from ->R $to"
+
+//    override val chanIn: ChannelIn[RT] = ChannelInRImpl(to.chan)
+
+    override def Visit[R[_]](visitor: SubscriptionFromVisitor[R]): R[RT] =
+        visitor.VisitSubscriptionRImpl(this)
 }
