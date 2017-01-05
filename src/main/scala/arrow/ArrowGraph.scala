@@ -30,6 +30,8 @@ import arrow.repr._
 import arrow.runtime._
 import shapeless._
 
+import scala.collection.Seq
+import scala.collection.generic.CanBuildFrom
 import scala.language.implicitConversions
 
 class ArrowGraph {
@@ -179,15 +181,13 @@ class ArrowGraph {
     (producer: P)
     (implicit genOut: P Outputs T): Future[IndexedSeq[T]] = {
         val out = genOut(producer)
-        val in = repr.makeDrainProcessorIn[T]()
+        val drainProcessor = repr.makeDrainProcessor[T]()
+        val in = repr.makeDrainProcessorIn[T](drainProcessor)
         repr.insertSubscription(out, in)
 
-        val runtime = new Runtime(this.repr)
+        val runtime = new Runtime[T](this.repr, drainProcessor)
 
         runtime.run()
-
-        // TODO: create Future
-        null
     }
 
     /**
@@ -365,7 +365,7 @@ class ArrowGraph {
         implicit def Split[Os, O, P, I, C, Cs]
         (implicit
          genOut: (P Outputs Os), // Fix Os
-         ms: Os <:< Traversable[O], // Fix O
+         ms: Os <:< Seq[O], // Fix O
          cs: Cs <:< Traversable[C], // Fix C
          link: LinkPoly.Case[Out[O], C]
         ): SplitCase[P, Cs]
@@ -392,16 +392,23 @@ class ArrowGraph {
         /** For [[implicitly]] testing */
         abstract class JoinCase[Ps, C] extends Case[Ps, C]
 
-        implicit def Join[Ps, P, O, Is, I, C]
+        /**
+          * Ps < Seq[P]
+          */
+        implicit def Join[Ps, P, O, Is, S[_], I, C]
         (implicit
-         ps: Ps <:< Traversable[P], // Fix P
+         ps: Ps <:< Seq[P], // Fix P
          genIn: (C Inputs Is), // Fix Is
-         is: Is <:< Traversable[I], // Fix I
-         link: LinkPoly.Case[P, In[I]]
+         is: S[I] =:= Is, // Fix I, S
+         s: S[_] <:< Seq[_],
+         cbf: CanBuildFrom[Nothing, I, S[I]],
+         link: LinkPoly.Case[P, In[I]],
+         mps: Manifest[Ps],
+         ms: Manifest[S[_]]
         ): JoinCase[Ps, C]
         = new JoinCase[Ps, C] {
             def apply(producers: Ps, consumer: C) {
-                DEBUG("[Join]")
+                DEBUG(s"[Join] ${ms}")
 
                 val in = genIn(consumer)
 
@@ -481,11 +488,11 @@ class ArrowGraph {
         (implicit genIn: (C Inputs M))
         = new HJoinNilCaseImpl[Ps, C, M]
 
-        final class HJoinCaseImpl[Ps <: HList, PH, PT <: HList,
-                                  M <: HList, MH, MT <: HList, C]
+        final class HJoinCaseImpl
+        [Ps <: HList, PH, PT <: HList, M <: HList, MH, MT <: HList, C]
         (implicit
          genIn: C Inputs M,
-         m: M <:< (MH :: MT),
+         m: (MH :: MT) <:< M,
          ps: Ps <:< (PH :: PT),
          linkHead: LinkPoly.Case[PH, In[MH]],
          linkTail: LinkPoly.Case[PT, In[MT]])
@@ -508,11 +515,21 @@ class ArrowGraph {
                            M <: HList, MH, MT <: HList, C]
         (implicit
          genIn: (C Inputs M),
-         m: M <:< (MH :: MT),
+         whyCantIRemoveThis: M <:< (MH :: MT),
+         m: (MH :: MT) <:< M,
          ps: Ps <:< (PH :: PT),
          linkHead: LinkPoly.Case[PH, In[MH]],
-         linkTail: LinkPoly.Case[PT, In[MT]])
-        = new HJoinCaseImpl[Ps, PH, PT, M, MH, MT, C]
+         linkTail: LinkPoly.Case[PT, In[MT]],
+         mm: Manifest[M],
+         mmh: Manifest[MH],
+         mmt: Manifest[MT],
+         mm2: Manifest[shapeless.::[MH, MT]]
+        )
+        : HJoinCase[Ps, C]
+        = {
+            println(mm)
+            new HJoinCaseImpl[Ps, PH, PT, M, MH, MT, C]
+        }
 
         // =====================================================================
         //  Heterogeneous Match

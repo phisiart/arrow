@@ -126,17 +126,12 @@ object BroadcastTest {
         def s[A](elems: A*): S[A] = elems.toList
 
         val f = (x: I) => m
-
-        val x = new Node[I, M] {
-            def apply(x: I) = f(x)
-        }
+        val x = Node(f)
 
         val g = (x: M) => o
         val gs = s(g, g)
 
-        val y = new Node[M, O] {
-            def apply(x: M) = g(x)
-        }
+        val y = Node(g)
         val ys = s(y, y)
 
         implicitly[RawLinkPoly.BroadcastCase[I => M, S[M => O]]]
@@ -169,16 +164,12 @@ object BroadcastRTest {
         type T = Int
 
         val f = (x: I) => r(m)
-        val x = new Node[I, RM] {
-            def apply(x: I) = f(x)
-        }
+        val x = Node(f)
 
         val g = (x: M) => o
         val gs = Vector(g, g)
 
-        val y = new Node[M, O] {
-            def apply(x: M) = g(x)
-        }
+        val y = Node(g)
         val ys = s(y, y)
 
         implicitly[RawLinkPoly.BroadcastCase[I => RM, S[M => O]]]

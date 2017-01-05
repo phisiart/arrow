@@ -28,6 +28,7 @@ import java.util.concurrent.Callable
 
 import arrow._
 
+import scala.collection.generic.CanBuildFrom
 import scala.collection.mutable.ArrayBuffer
 
 final case class SourceProcessorRunnable[T]
@@ -62,14 +63,82 @@ final case class NodeRunnable[I, O]
                     running = false
 
                 case _ =>
-                    throw new NotImplementedError()
+                    ???
             }
         }
     }
 }
 
-final case class SplitterRunnable[O, Os]() {
+/**
+  *  Os  +----------+  Seq[O]
+  * ---> | Splitter | ------->
+  *      +----------+
+  */
+final case class SplitterRunnable[O, Os](
+    inputChannel: Channel[Os],
+    outputChannals: IndexedSeq[IndexedSeq[ChannelIn[O]]]
+)(
+    implicit val os: Os <:< Seq[O]
+) extends Runnable {
 
+    override def run(): Unit = {
+        var running = true
+
+        while (running) {
+            val input = this.inputChannel.pull()
+            input match {
+                case Push(value) =>
+                    val outputs = os(value)
+
+                    outputChannals
+                        .zip(outputs)
+                        .foreach(
+                        {
+                            case (channelIn, output) =>
+                                channelIn.foreach(_.push(Push(output)))
+                        })
+
+                case Finish() =>
+                    outputChannals
+                        .foreach(_.foreach(_.push(Finish())))
+                    running = false
+
+                case _ =>
+                    ???
+            }
+        }
+    }
+}
+
+final case class JoinerRunnable[I, Is, S[_]]
+(inputChannels: IndexedSeq[Channel[I]],
+ outputChannels: IndexedSeq[ChannelIn[Is]])
+(implicit
+ val is: S[I] =:= Is,
+ val cbf: CanBuildFrom[Nothing, I, S[I]]) extends Runnable {
+
+    override def run(): Unit = {
+        var running = true
+
+        while (running) {
+            val inputs = inputChannels.map(_.pull())
+
+            if (inputs.forall(_.isInstanceOf[Push[I]])) {
+                val inputValues = inputs
+                    .map(_.asInstanceOf[Push[I]].value)
+                    .to[S]
+
+                outputChannels.foreach(_.push(Push[Is](inputValues)))
+
+            } else if (inputs.exists(_.isInstanceOf[Finish[I]])) {
+                outputChannels.foreach(_.push(Finish()))
+                running = false
+
+            } else {
+                ???
+            }
+        }
+    }
 }
 
 final case class DrainProcessorCallable[T](inputChannel: Channel[T])
@@ -84,15 +153,13 @@ final case class DrainProcessorCallable[T](inputChannel: Channel[T])
             val elem = inputChannel.pull()
             elem match {
                 case Push(value) =>
-                    println(s"New output value: $elem.")
                     buf.append(value)
 
                 case Finish() =>
-                    println("Finished.")
                     running = false
 
                 case _ =>
-                    throw new NotImplementedError()
+                    ???
             }
         }
 

@@ -55,7 +55,7 @@ trait InVisitor[R[_]] {
     def VisitSingleInputProcessorIn[I](in: SingleInputProcessorIn[I]): R[I]
     def VisitHJoinerHdIn[IH, IT <: HList, I <: HList](in: HJoinerHdIn[IH, IT, I]): R[IH]
     def VisitHJoinerTlIn[IH, IT <: HList, I <: HList](in: HJoinerTlIn[IH, IT, I]): R[IT]
-    def VisitJoinerIn[I, Is](in: JoinerIn[I, Is]): R[I]
+    def VisitJoinerIn[I, Is, S[_]](in: JoinerIn[I, Is, S]): R[I]
 }
 
 /** All types of [[In]]: */
@@ -120,8 +120,8 @@ final case class HJoinerTlIn[IH, IT <: HList, I <: HList]
         visitor.VisitHJoinerTlIn(this)
 }
 
-final case class JoinerIn[I, Is]
-(joiner: Joiner[I, Is], idx: Int) extends In[I] {
+final case class JoinerIn[I, Is, S[_]]
+(joiner: Joiner[I, Is, S], idx: Int) extends In[I] {
     this.joiner.ensureIdx(idx)
 
     override def toString = s"${this.joiner}.in[$idx]"

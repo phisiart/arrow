@@ -26,7 +26,9 @@ package arrow.repr
 
 import arrow._
 import shapeless._
+
 import collection.mutable.ArrayBuffer
+import scala.collection.generic.CanBuildFrom
 
 class Repr {
     def draw(): Unit = {
@@ -78,7 +80,7 @@ class Repr {
         }
     }
 
-    private def makeDrainProcessor[T](): DrainProcessor[T] = {
+    def makeDrainProcessor[T](): DrainProcessor[T] = {
         val processor = DrainProcessor[T]()
         this.processors.append(processor)
         processor
@@ -123,7 +125,8 @@ class Repr {
     /**
       * Will create subscription and record it.
       */
-    def insertSubscriptionR[T, RT](out: Out[RT], in: In[T])(implicit rt: RT <:< R[T]): Unit = {
+    def insertSubscriptionR[T, RT](out: Out[RT], in: In[T])
+                                  (implicit rt: RT <:< R[T]): Unit = {
         val subscription = new SubscriptionRImpl[RT, T](out, in)
         this.subscriptions += subscription
 
@@ -156,12 +159,16 @@ class Repr {
         new SingleInputProcessorIn[T](processor)
     }
 
+    def makeDrainProcessorIn[T](processor: DrainProcessor[T]): SingleInputProcessorIn[T] = {
+        new SingleInputProcessorIn[T](processor)
+    }
+
     /**
       * Given an [[In]]<[[IH]] :: [[IT]]>, construct an [[In]]<[[IH]]>
       */
     def makeHJoinerHdIn[IH, IT <: HList, I <: HList]
     (in: In[I])
-    (implicit i: I <:< (IH :: IT))
+    (implicit i: (IH :: IT) <:< I)
     : HJoinerHdIn[IH, IT, I] = {
         in
             .pullFrom
@@ -200,7 +207,7 @@ class Repr {
       */
     def makeHJoinerTlIn[IH, IT <: HList, I <: HList]
     (in: In[I])
-    (implicit i: I <:< (IH :: IT))
+    (implicit i: (IH :: IT) <:< I)
     : HJoinerTlIn[IH, IT, I] = {
         in
             .pullFrom
@@ -234,10 +241,10 @@ class Repr {
         }
     }
 
-    def makeJoinerIn[I, Is]
+    def makeJoinerIn[I, Is, S[_]]
     (in: In[Is], idx: Int)
-    (implicit is: Is <:< Traversable[I])
-    : JoinerIn[I, Is] = {
+    (implicit is: S[I] =:= Is, cbf: CanBuildFrom[Nothing, I, S[I]])
+    : JoinerIn[I, Is, S] = {
         in
             .pullFrom
             .filter(_.isInstanceOf[SubscriptionImpl[Is]])
@@ -246,14 +253,14 @@ class Repr {
             .filter(_.isInstanceOf[SingleOutputProcessorOut[Is]])
             .map(_.asInstanceOf[SingleOutputProcessorOut[Is]])
             .map(_.processor)
-            .find(_.isInstanceOf[Joiner[_, Is]])
+            .find(_.isInstanceOf[Joiner[_, Is @ unchecked, S @ unchecked]])
         match {
             case Some(x) =>
-                val joiner = x.asInstanceOf[Joiner[I, Is]]
-                new JoinerIn[I, Is](joiner, idx)
+                val joiner = x.asInstanceOf[Joiner[I, Is, S]]
+                new JoinerIn[I, Is, S](joiner, idx)
 
             case None =>
-                val joiner = new Joiner[I, Is](in)
+                val joiner = new Joiner[I, Is, S](in)
                 this.processors.append(joiner)
                 val joinerOut = SingleOutputProcessorOut(joiner)
                 this.insertSubscription(joinerOut, in)
@@ -341,7 +348,7 @@ class Repr {
       */
     def getSplitterOut[O, Os]
     (out: Out[Os], idx: Int)
-    (implicit os: Os <:< Traversable[O])
+    (implicit os: Os <:< Seq[O])
     : SplitterOut[O, Os] = {
         out
             .pushTo

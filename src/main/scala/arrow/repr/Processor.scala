@@ -24,10 +24,10 @@
 
 package arrow.repr
 
-import arrow.Node
-import arrow.runtime.Channel
+import arrow._
 import shapeless._
 
+import scala.collection.generic.CanBuildFrom
 import scala.collection.mutable.ArrayBuffer
 
 /**
@@ -42,7 +42,7 @@ trait ProcessorVisitor[R] {
     def VisitDrainProcessor[T](processor: DrainProcessor[T]): R
     def VisitNodeProcessor[I, O](processor: NodeProcessor[I, O]): R
     def VisitSplitter[O, Os](processor: Splitter[O, Os]): R
-    def VisitJoiner[I, Is](processor: Joiner[I, Is]): R
+    def VisitJoiner[I, Is, S[_]](processor: Joiner[I, Is, S]): R
     def VisitHSplitter[OH, OT <: HList, Os <: HList](processor: HSplitter[OH, OT, Os]): R
     def VisitHJoiner[IH, IT <: HList, Is <: HList](processor: HJoiner[IH, IT, Is]): R
 }
@@ -50,10 +50,10 @@ trait ProcessorVisitor[R] {
 sealed trait SingleInputProcessor[I] extends Processor {
     val pullFrom: collection.mutable.ArrayBuffer[SubscriptionTo[I]]
 
-    val inputChan: Channel[I] = {
-        println("Created channel.")
-        new Channel[I]()
-    }
+//    val inputChan: Channel[I] = {
+//        println("Created channel.")
+//        new Channel[I]()
+//    }
 }
 
 sealed trait SingleOutputProcessor[O] extends Processor {
@@ -109,6 +109,7 @@ final case class NodeProcessor[I, O](node: Node[I, O], id: Int)
   */
 
 final case class Splitter[O, Os](out: Out[Os])
+                                (implicit val os: Os <:< Seq[O])
     extends SingleInputProcessor[Os] {
 
     override def toString: String = s"${this.out}.split"
@@ -135,7 +136,10 @@ final case class Splitter[O, Os](out: Out[Os])
 
 /** [[Joiner]] */
 
-final case class Joiner[I, Is](in: In[Is]) extends SingleOutputProcessor[Is] {
+final case class Joiner[I, Is, S[_]]
+(in: In[Is])
+(implicit val is: S[I] =:= Is, val cbf: CanBuildFrom[Nothing, I, S[I]])
+    extends SingleOutputProcessor[Is] {
 
     override def toString: String = s"${this.in}.join"
 
@@ -149,19 +153,19 @@ final case class Joiner[I, Is](in: In[Is]) extends SingleOutputProcessor[Is] {
         }
     }
 
-    private var inputChansCreated = false
-    private var inputChans: IndexedSeq[Channel[I]] = _
-
-    def getInputChans: IndexedSeq[Channel[I]] = {
-        if (this.inputChansCreated) {
-            this.inputChans
-        } else {
-            this.inputChansCreated = true
-            this.inputChans = IndexedSeq
-                .fill(this.pullFroms.length)(new Channel[I])
-            this.inputChans
-        }
-    }
+//    private var inputChansCreated = false
+//    private var inputChans: IndexedSeq[Channel[I]] = _
+//
+//    def getInputChans: IndexedSeq[Channel[I]] = {
+//        if (this.inputChansCreated) {
+//            this.inputChans
+//        } else {
+//            this.inputChansCreated = true
+//            this.inputChans = IndexedSeq
+//                .fill(this.pullFroms.length)(new Channel[I])
+//            this.inputChans
+//        }
+//    }
 
     val pullFroms: ArrayBuffer[ArrayBuffer[SubscriptionTo[I]]] =
         ArrayBuffer.empty[ArrayBuffer[SubscriptionTo[I]]]
@@ -222,7 +226,7 @@ sealed trait HJoinerIT[IT <: HList] {
 
 final case class HJoiner[IH, IT <: HList, Is <: HList]
 (in: In[Is])
-(implicit i: Is <:< (IH :: IT))
+(implicit i: (IH :: IT) <:< Is)
     extends HJoinerIH[IH] with HJoinerIT[IT] with SingleOutputProcessor[Is] {
 
     override def toString = s"${this.in}.join"
@@ -236,9 +240,9 @@ final case class HJoiner[IH, IT <: HList, Is <: HList]
     override val pushTo: ArrayBuffer[SubscriptionFrom[Is]] =
         ArrayBuffer.empty[SubscriptionFrom[Is]]
 
-    val HInputChan: Channel[IH] = new Channel[IH]
+//    val HInputChan: Channel[IH] = new Channel[IH]
 
-    val TInputChan: Channel[IT] = new Channel[IT]
+//    val TInputChan: Channel[IT] = new Channel[IT]
 
     override def Visit[R](visitor: ProcessorVisitor[R]): R =
         visitor.VisitHJoiner(this)
