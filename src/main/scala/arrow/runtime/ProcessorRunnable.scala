@@ -27,6 +27,7 @@ package arrow.runtime
 import java.util.concurrent.Callable
 
 import arrow._
+import shapeless._
 
 import scala.collection.generic.CanBuildFrom
 import scala.collection.mutable.ArrayBuffer
@@ -36,8 +37,11 @@ final case class SourceProcessorRunnable[T]
     override def run(): Unit = {
         var curr = stream
         while (curr.nonEmpty) {
-            outputChannels.foreach(_.push(Push[T](curr.head)))
+            val output = curr.head
             curr = curr.tail
+
+            println(s"Output ${output}")
+            outputChannels.foreach(_.push(Push[T](output)))
         }
         outputChannels.foreach(_.push(Finish[T]()))
     }
@@ -136,6 +140,68 @@ final case class JoinerRunnable[I, Is, S[_]]
 
             } else {
                 ???
+            }
+        }
+    }
+}
+
+final case class HSplitterRunnable[H, T <: HList, L <: HList]
+(inputChan: Channel[L],
+ hOutputChans: IndexedSeq[ChannelIn[H]],
+ tOutputChans: IndexedSeq[ChannelIn[T]])
+(implicit val l: L <:< (H :: T)) extends Runnable {
+
+    override def run(): Unit = {
+        var running = true
+
+        while (running) {
+            val input = inputChan.pull()
+
+            input match {
+                case Push(value) =>
+                    val head = value.head
+                    val tail = value.tail
+
+                    hOutputChans.foreach(_.push(Push(head)))
+                    tOutputChans.foreach(_.push(Push(tail)))
+
+                case Finish() =>
+                    hOutputChans.foreach(_.push(Finish()))
+                    tOutputChans.foreach(_.push(Finish()))
+                    running = false
+
+                case _ =>
+                    ???
+            }
+        }
+    }
+}
+
+final case class HJoinerRunnable[H, T <: HList, L <: HList]
+(hInputChan: Channel[H],
+ tInputChan: Channel[T],
+ outputChans: IndexedSeq[ChannelIn[L]])
+(implicit val l: (H :: T) <:< L) extends Runnable {
+
+    override def run(): Unit = {
+        var running = true
+
+        while (running) {
+            val hd = hInputChan.pull()
+            val tl = tInputChan.pull()
+
+            (hd, tl) match {
+                case (Push(head), Push(tail)) =>
+                    val input = head :: tail
+                    val output = l(input)
+                    outputChans.foreach(_.push(Push(output)))
+
+                case (Finish(), _) | (_, Finish()) =>
+                    outputChans.foreach(_.push(Finish()))
+                    running = false
+
+                case _ =>
+                    ???
             }
         }
     }

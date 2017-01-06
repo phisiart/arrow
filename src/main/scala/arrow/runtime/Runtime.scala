@@ -54,10 +54,13 @@ class Runtime[RetType](val repr: Repr, val drainProcessor: DrainProcessor[RetTyp
     log.setLevel(Level.ALL)
 
     // Create all the channels
-    val processorInfos: Map[Processor, ProcessorInfo] = {
+    val processorInfos2: IndexedSeq[ProcessorInfo] = {
         repr.processors
-            .map(processor => (processor, processor.Visit(ProcessorInfoCreator)))
-            .toMap
+            .map(_.Visit(ProcessorInfoCreator))
+    }
+
+    def processorInfos(processor: Processor): ProcessorInfo = {
+        this.processorInfos2(processor.id)
     }
 
     val pool: ExecutorService = Executors.newCachedThreadPool()
@@ -90,17 +93,27 @@ class Runtime[RetType](val repr: Repr, val drainProcessor: DrainProcessor[RetTyp
             new SingleInputInfo[I]
         }
 
-        override def VisitSplitter[O, Os](processor: Splitter[O, Os]): ProcessorInfo =
+        override def VisitSplitter[O, Os](processor: Splitter[O, Os]): ProcessorInfo = {
+            log.info("Created SingleInputInfo for Splitter")
             new SingleInputInfo[O]
+        }
 
-        override def VisitJoiner[I, Is, S[_]](processor: Joiner[I, Is, S]): ProcessorInfo =
+        override def VisitJoiner[I, Is, S[_]](processor: Joiner[I, Is, S]): ProcessorInfo = {
+            log.info("Created JoinerInfo")
             new JoinerInfo[I, Is](processor.pullFroms.length)
+        }
 
-        override def VisitHSplitter[OH, OT <: HList, Os <: HList](processor: HSplitter[OH, OT, Os]): ProcessorInfo =
+        override def VisitHSplitter[OH, OT <: HList, Os <: HList]
+        (processor: HSplitter[OH, OT, Os]): ProcessorInfo = {
+            log.info("Created HSplitterInfo")
             new SingleInputInfo[Os]
+        }
 
-        override def VisitHJoiner[IH, IT <: HList, Is <: HList](processor: HJoiner[IH, IT, Is]): ProcessorInfo =
+        override def VisitHJoiner[IH, IT <: HList, Is <: HList]
+        (processor: HJoiner[IH, IT, Is]): ProcessorInfo = {
+            log.info("Created HJoinerInfo")
             new HJoinerInfo[IH, IT, Is]
+        }
     }
 
     object InToChannel extends InVisitor[Channel] {
@@ -191,7 +204,9 @@ class Runtime[RetType](val repr: Repr, val drainProcessor: DrainProcessor[RetTyp
                 .pushTo
                 .map(_.Visit(SubscriptionFromToChannelIn))
 
-            val runnable = JoinerRunnable[I, Is, S](inputChans, outputChans)(processor.is, processor.cbf)
+            val runnable = JoinerRunnable[I, Is, S](
+                inputChans, outputChans
+            )(processor.is, processor.cbf)
 
             log.info("Created JoinerRunnable")
 
@@ -200,12 +215,46 @@ class Runtime[RetType](val repr: Repr, val drainProcessor: DrainProcessor[RetTyp
             None
         }
 
-        override def VisitHSplitter[OH, OT <: HList, Os <: HList](processor: HSplitter[OH, OT, Os]): Option[Future[IndexedSeq[Type]]] = ???
+        override def VisitHSplitter[OH, OT <: HList, Os <: HList]
+        (processor: HSplitter[OH, OT, Os])
+        : Option[Future[IndexedSeq[Type]]] = {
+            val inputChan = getSingleInputInfo(processor).inputChan
+
+            val hOutputChans = processor
+                .pushToHd.map(_.Visit(SubscriptionFromToChannelIn))
+            val tOutputChans = processor
+                .pushToTl.map(_.Visit(SubscriptionFromToChannelIn))
+
+            val runnable = HSplitterRunnable[OH, OT, Os](
+                inputChan, hOutputChans, tOutputChans
+            )(processor.o)
+
+            log.info("Created HSplitterRunnable")
+
+            pool.submit(runnable)
+
+            None
+        }
 
         override def VisitHJoiner[IH, IT <: HList, Is <: HList]
         (processor: HJoiner[IH, IT, Is])
         : Option[Future[IndexedSeq[Type]]] = {
-            ???
+            val hJoinerInfo = getHJoinerInfo(processor)
+
+            val hInputChan = hJoinerInfo.hdInputChan
+            val tInputChan = hJoinerInfo.tlInputChan
+
+            val outputChans = processor
+                .pushTo
+                .map(_.Visit(SubscriptionFromToChannelIn))
+
+            val runnable = HJoinerRunnable(hInputChan, tInputChan, outputChans)(processor.i)
+
+            log.info("Created HJoinerRunnable")
+
+            pool.submit(runnable)
+
+            None
         }
     }
 

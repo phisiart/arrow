@@ -474,18 +474,20 @@ class ArrowGraph {
 
         /** [[HNil]] |> [[In]]<[[HNil]]> */
         final class HJoinNilCaseImpl[Ps <: HList, C, M <: HNil]
-        (implicit genIn: C Inputs M)
+        (implicit genIn: C Inputs M, m: HNil <:< M)
         extends HJoinCase[Ps, C] {
             def apply(producers: Ps, consumer: C) {
                 DEBUG("[HJoinNil]")
 
                 val in = genIn(consumer)
-                // TODO: supply fake input
+                val out = repr.getStreamOut(Stream.continually(m(HNil)))
+
+                repr.insertSubscription(out, in)
             }
         }
 
         implicit def GenHJoinNilCase[Ps <: HNil, C, M <: HNil]
-        (implicit genIn: (C Inputs M))
+        (implicit genIn: (C Inputs M), m: HNil <:< M)
         = new HJoinNilCaseImpl[Ps, C, M]
 
         final class HJoinCaseImpl
@@ -511,8 +513,8 @@ class ArrowGraph {
             }
         }
 
-        implicit def HJoin[Ps <: HList, PH, PT <: HList,
-                           M <: HList, MH, MT <: HList, C]
+        implicit def HJoin
+        [Ps <: HList, PH, PT <: HList, M <: HList, MH, MT <: HList, C]
         (implicit
          genIn: (C Inputs M),
          whyCantIRemoveThis: M <:< (MH :: MT),

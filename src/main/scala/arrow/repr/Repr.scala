@@ -61,32 +61,28 @@ class Repr {
         }
     }
 
+    /**
+      * Create a [[Processor]] given a [[Stream]].
+      */
     private def streamToProcessor[O](stream: Stream[O])
     : SourceProcessor[O] = {
-        this.processors
-            .filter(_.isInstanceOf[SourceProcessor[_]])
-            .map(_.asInstanceOf[SourceProcessor[_]])
-            .map(x => (x, x.stream))
-            .find(_._2 == stream)
-        match {
-            case Some((streamProcessor, _)) =>
-                streamProcessor.asInstanceOf[SourceProcessor[O]]
-
-            case _ =>
-                val id = this.processors.length
-                val processor = SourceProcessor(stream)
-                this.processors.append(processor)
-                processor
-        }
-    }
-
-    def makeDrainProcessor[T](): DrainProcessor[T] = {
-        val processor = DrainProcessor[T]()
+        // We will always create a new processor, because we don't want to
+        // compare streams.
+        val id = this.processors.length
+        val processor = SourceProcessor(stream, id)
         this.processors.append(processor)
         processor
     }
 
-
+    /**
+      * Create a [[DrainProcessor]]
+      */
+    def makeDrainProcessor[T](): DrainProcessor[T] = {
+        val id = this.processors.length
+        val processor = DrainProcessor[T](id)
+        this.processors.append(processor)
+        processor
+    }
 
     /**
       * Given a function, ensure it is recorded in the [[Repr]], and return the
@@ -192,7 +188,8 @@ class Repr {
 
             case None =>
                 // Create a new HJoiner and attach to the input.
-                val hJoiner = new HJoiner[IH, IT, I](in)
+                val id = this.processors.length
+                val hJoiner = new HJoiner[IH, IT, I](in, id)
                 this.processors.append(hJoiner)
 
                 val hJoinerOut = SingleOutputProcessorOut(hJoiner)
@@ -231,7 +228,8 @@ class Repr {
 
             case None =>
                 // Create a new HJoiner and attach to the input.
-                val hJoiner = new HJoiner[IH, IT, I](in)
+                val id = this.processors.length
+                val hJoiner = new HJoiner[IH, IT, I](in, id)
                 this.processors.append(hJoiner)
 
                 val hJoinerOut = SingleOutputProcessorOut(hJoiner)
@@ -260,7 +258,8 @@ class Repr {
                 new JoinerIn[I, Is, S](joiner, idx)
 
             case None =>
-                val joiner = new Joiner[I, Is, S](in)
+                val id = this.processors.length
+                val joiner = new Joiner[I, Is, S](in, id)
                 this.processors.append(joiner)
                 val joinerOut = SingleOutputProcessorOut(joiner)
                 this.insertSubscription(joinerOut, in)
@@ -307,7 +306,8 @@ class Repr {
                 HSplitterHdOut(hSplitter)
 
             case None =>
-                val hSplitter = new HSplitter[OH, OT, O](out)
+                val id = this.processors.length
+                val hSplitter = new HSplitter[OH, OT, O](out, id)
                 this.processors.append(hSplitter)
                 val hSplitterIn = SingleInputProcessorIn(hSplitter)
                 this.insertSubscription(out, hSplitterIn)
@@ -334,7 +334,8 @@ class Repr {
                 HSplitterTlOut(hSplitter)
 
             case None =>
-                val hSplitter = new HSplitter[OH, OT, O](out)
+                val id = this.processors.length
+                val hSplitter = new HSplitter[OH, OT, O](out, id)
                 this.processors.append(hSplitter)
                 val hSplitterIn = SingleInputProcessorIn(hSplitter)
                 this.insertSubscription(out, hSplitterIn)
@@ -365,7 +366,8 @@ class Repr {
                 SplitterOut(splitter, idx)
 
             case None =>
-                val splitter = new Splitter[O, Os](out)
+                val id = this.processors.length
+                val splitter = new Splitter[O, Os](out, id)
                 this.processors.append(splitter)
                 val splitterIn = SingleInputProcessorIn(splitter)
                 this.insertSubscription(out, splitterIn)

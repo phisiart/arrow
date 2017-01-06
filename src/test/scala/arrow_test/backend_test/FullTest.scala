@@ -28,7 +28,6 @@ import arrow._
 import shapeless._
 
 import scala.reflect.ClassTag
-import scala.reflect.api.TypeTags
 
 object FullTest {
     def main(args: Array[String]): Unit = {
@@ -102,9 +101,9 @@ object HJoinerTest {
         val graph = new ArrowGraph
         import graph._
 
-        val inputs = Stream(1, 2, 3, 4, 5) :: Stream(1f, 2f, 3f, 4f, 5f) :: HNil
+        val inputs = Stream(1, 2, 3, 4, 5) :: HNil
 
-        val hJoiner = Node((xs: Int :: Float :: HNil) => {
+        val hJoiner = Node((xs: Int :: HNil) => {
             println(s"$xs")
             ()
         })
@@ -112,6 +111,25 @@ object HJoinerTest {
         inputs |> hJoiner
 
         val future = run(hJoiner)
+    }
+}
+
+object HSplitterTest {
+    def main(args: Array[String]): Unit = {
+        val graph = new ArrowGraph
+        import graph._
+
+        val inputs = Stream(1, 2, 3, 4, 5)
+        val hSplitter = Node((x: Int) => {
+            println(x)
+            x :: HNil
+        })
+
+        val node = Node(identity[Int])
+
+        inputs |> hSplitter |> (node :: HNil)
+
+        val future = run(node)
     }
 }
 
