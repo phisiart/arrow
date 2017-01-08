@@ -22,10 +22,16 @@ import arrow._
 
 object Example {
   def main(args: Array[String]) {
-    val graph = new ArrowGraph
-    import graph._
+    val graph = new ArrowGraph          // create a new graph
+    import graph._                      // import the `|>` operator
     
-    val flow = Stream(0, 1, 2) |> ((_: Int) + 1) |> ((_: Int) - 1)
+    val func1 = (_: Int) + 1            // can directly use Scala function
+    val node2 = Node((_: Int) * 2)      // can also create node explicitly
+    
+    Stream(0, 1, 2) |> func1 |> node2   // draw dataflow
+    
+    val output = run(node2)             // output: Future[IndexedSeq[Int]]
+                                        //   will return [2, 4, 6]
   }
 }
 ```
