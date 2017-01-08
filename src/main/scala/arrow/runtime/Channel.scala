@@ -24,9 +24,12 @@
 
 package arrow.runtime
 
+import java.util
+import java.util.concurrent.locks._
+
 import arrow._
 
-import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 /**
   * Node[_, T] |> Node[T, _]
@@ -56,13 +59,12 @@ final case class ChannelInImpl[T](chan: Channel[T]) extends ChannelIn[T] {
 
 final case class ChannelInRImpl[T, RT](chan: Channel[T])(implicit rt: RT <:< R[T]) extends ChannelIn[RT] {
     override def push(msg: R[RT]): Unit = {
-        // TODO: modify this
         chan.push(msg match {
-            case Push(value) =>
+            case Value(value, _, _) =>
                 rt(value)
 
-            case Put(value) =>
-                rt(value)
+            case Ignore() =>
+                Ignore[T]()
 
             case Finish() =>
                 Finish[T]()
@@ -76,38 +78,131 @@ final case class ChannelInRImpl[T, RT](chan: Channel[T])(implicit rt: RT <:< R[T
     }
 }
 
-class Channel[T] {
-    val BUF_SIZE = 100
-    val buf = new mutable.Queue[R[T]]()
+final class CircularDeque[T](val capacity: Int) {
 
-    def push(msg: R[T]): Unit = synchronized {
-        msg match {
-            case Push(value) =>
-                while (buf.size == BUF_SIZE) {
-                    wait()
-                }
+    /**
+      * <- [[popFront]] [[lastUsedSlot]]
+      *                        |
+      *                 +-----+----------+-----+
+      *                 | ... | xxxxxxxx | ... |
+      *                 +-----+----------+-----+
+      *                                   |
+      *                          [[nextAvailableSlot]] <- [[pushBack]]
+      */
 
-                buf.enqueue(msg)
-                notifyAll()
+    private var _size: Int = 0
+    private var nextAvailableSlot: Int = 0
+    private var lastUsedSlot: Int = 0
+    private val buf: ArrayBuffer[T] = new ArrayBuffer[T](capacity)
 
-            case Finish() =>
-                buf.enqueue(msg)
-                notifyAll()
+    def size: Int = this._size
 
-            case _ =>
-                // TODO: not implemented
-                throw new NotImplementedError()
-        }
+    def isFull: Boolean = this.size == this.capacity
+
+    def isEmpty: Boolean = this.size == 0
+
+    def pushBack(value: T): Unit = {
+        this.buf(nextAvailableSlot) = value
+
+        this._size += 1
+        this.nextAvailableSlot += 1
+        this.nextAvailableSlot %= this.capacity
     }
 
-    def pull(): R[T] = synchronized {
-        while (buf.isEmpty) {
-            wait()
+    def pushFront(value: T): Unit = {
+        this._size += 1
+        lastUsedSlot += this.capacity - 1
+        lastUsedSlot %= this.capacity
+
+        this.buf(lastUsedSlot) = value
+    }
+
+    def popBack(): T = {
+        this._size -= 1
+        this.nextAvailableSlot += this.capacity - 1
+        this.nextAvailableSlot %= this.capacity
+
+        this.buf(this.nextAvailableSlot)
+    }
+
+    def popFront(): T = {
+        val value = this.buf(this.lastUsedSlot)
+
+        this._size -= 1
+        lastUsedSlot += 1
+        lastUsedSlot %= this.capacity
+
+        value
+    }
+
+    def back: T = {
+        val idx = (this.nextAvailableSlot + this.capacity - 1) % this.capacity
+        this.buf(idx)
+    }
+
+    def front: T = {
+        this.buf(this.lastUsedSlot)
+    }
+}
+
+class Channel[T] {
+    val BUF_SIZE = 100
+
+    val fuck = new util.ArrayDeque[Int](BUF_SIZE)
+
+    val deque = new util.ArrayDeque[Inputable[T]](BUF_SIZE)
+    private val lock = new ReentrantLock()
+    private val notFull = this.lock.newCondition()
+    private val notEmpty = this.lock.newCondition()
+
+    def push(msg: R[T]): Unit = {
+        msg match {
+            case msg: Inputable[T] =>
+                this.lock.lock()
+                try {
+                    while (this.deque.size() == BUF_SIZE &&
+                        !this.deque.peekLast().replaceable) {
+                        this.notFull.await()
+                    }
+
+                    if (this.deque.size() != BUF_SIZE) {
+                        this.deque.offerLast(msg)
+                    } else {
+                        this.deque.removeLast()
+                        this.deque.offerLast(msg)
+                    }
+
+                    this.notEmpty.signal()
+
+                } finally {
+                    this.lock.unlock()
+                }
+
+            case Ignore() =>
+                // Ignore
         }
 
-        val elem = buf.dequeue()
-        notifyAll()
+        Runtime.log.info(s"Pushed $msg")
+    }
 
-        elem
+    def pull(): Inputable[T] = {
+        this.lock.lock()
+        try {
+            while (this.deque.isEmpty) {
+                this.notEmpty.await()
+            }
+
+            val front = this.deque.peekFirst()
+            if (!front.reusable) {
+                this.deque.removeFirst()
+            }
+
+            this.notFull.signal()
+
+            front
+
+        } finally {
+            this.lock.unlock()
+        }
     }
 }

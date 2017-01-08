@@ -41,7 +41,7 @@ final case class SourceProcessorRunnable[T]
             curr = curr.tail
 
             println(s"Output ${output}")
-            outputChannels.foreach(_.push(Push[T](output)))
+            outputChannels.foreach(_.push(Value[T](output)))
         }
         outputChannels.foreach(_.push(Finish[T]()))
     }
@@ -57,18 +57,25 @@ final case class NodeRunnable[I, O]
 
         while (running) {
             val input = this.inputChannel.pull()
-            input match {
-                case Push(value) =>
+
+            val msg: R[O] = input match {
+                case Value(value, _, _) =>
                     val output = this.node.apply(value)
-                    outputChannels.foreach(_.push(Push(output)))
+                    Value(output)
+
 
                 case Finish() =>
-                    outputChannels.foreach(_.push(Finish()))
                     running = false
+                    Finish()
 
-                case _ =>
-                    ???
+                case Empty() =>
+                    Empty()
+
+                case Break() =>
+                    Break()
             }
+
+            outputChannels.foreach(_.push(msg))
         }
     }
 }
@@ -91,7 +98,7 @@ final case class SplitterRunnable[O, Os](
         while (running) {
             val input = this.inputChannel.pull()
             input match {
-                case Push(value) =>
+                case Value(value, _, _) =>
                     val outputs = os(value)
 
                     outputChannals
@@ -99,7 +106,7 @@ final case class SplitterRunnable[O, Os](
                         .foreach(
                         {
                             case (channelIn, output) =>
-                                channelIn.foreach(_.push(Push(output)))
+                                channelIn.foreach(_.push(Value(output)))
                         })
 
                 case Finish() =>
@@ -107,8 +114,13 @@ final case class SplitterRunnable[O, Os](
                         .foreach(_.foreach(_.push(Finish())))
                     running = false
 
-                case _ =>
-                    ???
+                case Empty() =>
+                    outputChannals
+                        .foreach(_.foreach(_.push(Empty())))
+
+                case Break() =>
+                    outputChannals
+                        .foreach(_.foreach(_.push(Break())))
             }
         }
     }
@@ -127,20 +139,40 @@ final case class JoinerRunnable[I, Is, S[_]]
         while (running) {
             val inputs = inputChannels.map(_.pull())
 
-            if (inputs.forall(_.isInstanceOf[Push[I]])) {
-                val inputValues = inputs
-                    .map(_.asInstanceOf[Push[I]].value)
-                    .to[S]
+            var hasFinish = false
+            var hasBreak = false
+            var hasEmpty = false
+            inputs.foreach(
+                {
+                    case Value(_, _, _) =>
+                    case Finish() => hasFinish = true
+                    case Break() => hasBreak = true
+                    case Empty() => hasEmpty = true
+                }
+            )
 
-                outputChannels.foreach(_.push(Push[Is](inputValues)))
+            val output: R[Is] =
+                if (hasFinish) {
+                    running = false
+                    Finish()
 
-            } else if (inputs.exists(_.isInstanceOf[Finish[I]])) {
-                outputChannels.foreach(_.push(Finish()))
-                running = false
+                } else if (hasBreak) {
+                    Break()
 
-            } else {
-                ???
-            }
+                } else if (hasEmpty) {
+                    Empty()
+
+                } else {
+                    Value[Is](
+                        is(
+                            inputs
+                                .map(_.asInstanceOf[Value[I]].value)
+                                .to[S]
+                        )
+                    )
+                }
+
+            outputChannels.foreach(_.push(output))
         }
     }
 }
@@ -158,20 +190,25 @@ final case class HSplitterRunnable[H, T <: HList, L <: HList]
             val input = inputChan.pull()
 
             input match {
-                case Push(value) =>
+                case Value(value, _, _) =>
                     val head = value.head
                     val tail = value.tail
 
-                    hOutputChans.foreach(_.push(Push(head)))
-                    tOutputChans.foreach(_.push(Push(tail)))
+                    hOutputChans.foreach(_.push(Value(head)))
+                    tOutputChans.foreach(_.push(Value(tail)))
 
                 case Finish() =>
+                    running = false
                     hOutputChans.foreach(_.push(Finish()))
                     tOutputChans.foreach(_.push(Finish()))
-                    running = false
 
-                case _ =>
-                    ???
+                case Break() =>
+                    hOutputChans.foreach(_.push(Break()))
+                    tOutputChans.foreach(_.push(Break()))
+
+                case Empty() =>
+                    hOutputChans.foreach(_.push(Empty()))
+                    tOutputChans.foreach(_.push(Empty()))
             }
         }
     }
@@ -191,17 +228,20 @@ final case class HJoinerRunnable[H, T <: HList, L <: HList]
             val tl = tInputChan.pull()
 
             (hd, tl) match {
-                case (Push(head), Push(tail)) =>
+                case (Value(head, _, _), Value(tail, _, _)) =>
                     val input = head :: tail
                     val output = l(input)
-                    outputChans.foreach(_.push(Push(output)))
+                    outputChans.foreach(_.push(Value(output)))
 
                 case (Finish(), _) | (_, Finish()) =>
                     outputChans.foreach(_.push(Finish()))
                     running = false
 
-                case _ =>
-                    ???
+                case (Break(), _) | (_, Break()) =>
+                    outputChans.foreach(_.push(Break()))
+
+                case (Empty(), _) | (_, Empty()) =>
+                    outputChans.foreach(_.push(Break()))
             }
         }
     }
@@ -214,18 +254,29 @@ final case class DrainProcessorCallable[T](inputChannel: Channel[T])
 
     override def call(): IndexedSeq[T] = {
         var running = true
+        var replaceable = false
 
         while (running) {
             val elem = inputChannel.pull()
+
             elem match {
-                case Push(value) =>
-                    buf.append(value)
+                case Value(value, _, _) =>
+                    if (replaceable) {
+                        buf(buf.length - 1) = value
+                    } else {
+                        buf.append(value)
+                    }
+
+                    replaceable = elem.replaceable
+
+                case Empty() =>
+                    // Ignore
+
+                case Break() =>
+                    // Ignore
 
                 case Finish() =>
                     running = false
-
-                case _ =>
-                    ???
             }
         }
 

@@ -35,13 +35,13 @@ object FullTest {
         import graph._
 
         val id = Node((x: Int) => {
-            Thread.sleep(1000L)
+//            Thread.sleep(1000L)
             println(s"id($x) = $x")
             x
         })
 
         val succ = Node((x: Int) => {
-            Thread.sleep(1000L)
+//            Thread.sleep(1000L)
             println(s"succ($x) = ${x + 1}")
             x + 1
         })

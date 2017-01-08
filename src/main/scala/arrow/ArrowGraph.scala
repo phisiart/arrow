@@ -194,7 +194,7 @@ class ArrowGraph {
       * Objects encapsulated with [[Flow]] should also be able to link.
       */
     object LinkPoly {
-        def DEBUG(x: Any) = println(x)
+        def DEBUG(x: Any): Unit = println(x)
 
         abstract class Case[A, B] {
             type R
@@ -255,7 +255,7 @@ class ArrowGraph {
     }
 
     object RawLinkPoly {
-        def DEBUG(x: Any) = println(x)
+        def DEBUG(x: Any): Unit = println(x)
 
         abstract class Case[A, B] {
             def apply(a: A, b: B): Unit
@@ -480,9 +480,11 @@ class ArrowGraph {
                 DEBUG("[HJoinNil]")
 
                 val in = genIn(consumer)
-                val out = repr.getStreamOut(Stream.continually(m(HNil)))
+                val out = repr.getStreamOut[R[M]](Stream(
+                    Value[M](m(HNil), reusable = true)
+                ))
 
-                repr.insertSubscription(out, in)
+                repr.insertSubscriptionR(out, in)
             }
         }
 

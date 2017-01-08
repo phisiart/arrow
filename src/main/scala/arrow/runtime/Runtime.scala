@@ -30,7 +30,6 @@ import java.util.logging.{Level, Logger}
 import arrow.repr._
 import shapeless._
 
-
 sealed trait ProcessorInfo
 
 final class SourceInfo[O] extends ProcessorInfo
@@ -270,4 +269,9 @@ class Runtime[RetType](val repr: Repr, val drainProcessor: DrainProcessor[RetTyp
 
         future
     }
+}
+
+object Runtime {
+    val log: Logger = Logger.getLogger("runtime")
+    log.setLevel(Level.ALL)
 }

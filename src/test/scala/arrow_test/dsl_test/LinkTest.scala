@@ -49,8 +49,8 @@ object OneToOneRChainTest {
         val graph = new ArrowGraph
         import graph._
 
-        val f = (x: Int) => Push(x)
-        val g = (x: Int) => Put(x)
+        val f = (x: Int) => Value(x)
+        val g = (x: Int) => Finish[Int]()
         val h = (x: Int) => Finish[Int]()
 
         (f |> g) |> h
@@ -63,7 +63,7 @@ object HSplitChainTest {
         val graph = new ArrowGraph
         import graph._
 
-        val f = (x: Int) => 1 :: 3.0 :: HNil
+        val f = (_: Int) => 1 :: 3.0 :: HNil
 
         val g0 = ((_: Int) + 1) |> ((_: Int) - 1)
         val g1 = ((_: Double) + 1.0) |> ((_: Double) - 1.0)
@@ -89,17 +89,16 @@ object ComplexFlowTest {
         val graph = new ArrowGraph
         import graph._
 
-        val query = (id: Int) => {
+        val query = (_: Int) => {
             val name = "John Smith"
             val age = 20
             HList(name, age)
-//            name :: age :: HNil
         }
 
         val name = (name: String) => name
         val age = (age: Int) => age
 
-        val combine = (in: String :: Int :: HNil) => ()
+        val combine = (_: String :: Int :: HNil) => ()
 
         query |> HList(name, age) |> combine
     }

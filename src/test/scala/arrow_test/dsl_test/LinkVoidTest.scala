@@ -25,7 +25,6 @@
 package arrow_test.dsl_test
 
 import arrow._
-import arrow.repr._
 import shapeless._
 import shapeless.syntax.std.tuple._
 
@@ -44,13 +43,9 @@ object OneToOneTest {
 
         val g = (x: M) => o
 
-        val x = new Node[I, M] {
-            def apply(x: I) = f(x)
-        }
+        val x = Node(f)
 
-        val y = new Node[M, O] {
-            def apply(x: M) = g(x)
-        }
+        val y = Node(g)
 
         implicitly[RawLinkPoly.OneToOneCase[I => M, M => O]]
         implicitly[RawLinkPoly.OneToOneCase[I => M, Node[M, O]]]
@@ -83,8 +78,8 @@ object OneToOneRTest {
 
         type I = Int
         type M = Int
-        type RM = Push[M]
-        val rm = Push(1)
+        type RM = Value[M]
+        val rm = Value(1)
         type O = Int
         val o = 1
 
@@ -92,13 +87,9 @@ object OneToOneRTest {
 
         val g = (x: M) => o
 
-        val x = new Node[I, RM] {
-            def apply(x: I) = f(x)
-        }
+        val x = Node(f)
 
-        val y = new Node[M, O] {
-            def apply(x: M) = o
-        }
+        val y = Node(g)
 
         implicitly[RawLinkPoly.OneToOneRCase[I => RM, M => O]]
         implicitly[RawLinkPoly.OneToOneRCase[I => RM, Node[M, O]]]
@@ -154,8 +145,8 @@ object BroadcastRTest {
         type I = Int
         type M = Array[Double]
         val m = Array.empty[Double]
-        type RM = Push[M]
-        def r(m: M): RM = Push(m)
+        type RM = Value[M]
+        def r(m: M): RM = Value(m)
         type S[X] = Vector[X]
         def s[A](elems: A*): S[A] = elems.toVector
         type O = Int
@@ -196,14 +187,10 @@ object MergeTest {
         val g = identity[T] _
 
         val xs = List(
-            new Node[T, T] {
-                def apply(x: T) = x
-            }
+            Node(identity[T])
         )
 
-        val y = new Node[T, T] {
-            def apply(x: T) = g(x)
-        }
+        val y = Node(g)
 
         implicitly[RawLinkPoly.MergeCase[List[T => T], T => T]]
         implicitly[RawLinkPoly.MergeCase[List[T => T], Node[T, T]]]
@@ -223,26 +210,20 @@ object MergeRTest {
         import graph._
 
         type T = Double
-        val fun = (x: T) => Push(x)
+        val fun = (x: T) => Value(x)
 
         val fs = List(fun)
 
         val g = fun
 
-        val xs = List(
-            new Node[T, R[T]] {
-                def apply(x: T) = fun(x)
-            }
-        )
+        val xs = List(Node(fun))
 
-        val y = new Node[T, Push[T]] {
-            def apply(x: T) = g(x)
-        }
+        val y = Node(g)
 
-        implicitly[RawLinkPoly.MergeCase[List[T => Push[T]], T => T]]
-        implicitly[RawLinkPoly.MergeCase[List[T => Push[T]], Node[T, T]]]
-        implicitly[RawLinkPoly.MergeCase[List[Node[T, Push[T]]], T => T]]
-        implicitly[RawLinkPoly.MergeCase[List[Node[T, Push[T]]], Node[T, T]]]
+        implicitly[RawLinkPoly.MergeCase[List[T => Value[T]], T => T]]
+        implicitly[RawLinkPoly.MergeCase[List[T => Value[T]], Node[T, T]]]
+        implicitly[RawLinkPoly.MergeCase[List[Node[T, Value[T]]], T => T]]
+        implicitly[RawLinkPoly.MergeCase[List[Node[T, Value[T]]], Node[T, T]]]
 
         fs |> g
         fs |> y
@@ -263,13 +244,9 @@ object SplitTest {
         val g = identity[T] _
         val gs: Vector[T => T] = Vector(g, g)
 
-        val x = new Node[T, List[T]] {
-            def apply(x: T) = f(x)
-        }
+        val x = Node(f)
 
-        val y = new Node[T, T] {
-            def apply(x: T) = g(x)
-        }
+        val y = Node(g)
         val ys = Seq(y, y)
 
         implicitly[RawLinkPoly.SplitCase[T => List[T], Vector[T => T]]]
@@ -291,24 +268,20 @@ object SplitRTest {
 
         type T = Int
 
-        val f = (x: T) => List(Push(x), Put(x))
+        val f = (x: T) => List(Value(x), Finish[T]())
 
         val g = identity[T] _
         val gs = Vector(g, g)
 
-        val x = new Node[T, List[R[T]]] {
-            def apply(x: T) = f(x)
-        }
+        val x = Node(f)
 
-        val y = new Node[T, T] {
-            def apply(x: T) = g(x)
-        }
+        val y = Node(g)
         val ys = Seq(y, y)
 
-        implicitly[RawLinkPoly.SplitCase[T => List[Push[T]], Vector[T => T]]]
-        implicitly[RawLinkPoly.SplitCase[T => List[Push[T]], Vector[Node[T, T]]]]
-        implicitly[RawLinkPoly.SplitCase[Node[T, List[Push[T]]], Vector[T => T]]]
-        implicitly[RawLinkPoly.SplitCase[Node[T, List[Push[T]]], Vector[Node[T, T]]]]
+        implicitly[RawLinkPoly.SplitCase[T => List[Value[T]], Vector[T => T]]]
+        implicitly[RawLinkPoly.SplitCase[T => List[Value[T]], Vector[Node[T, T]]]]
+        implicitly[RawLinkPoly.SplitCase[Node[T, List[Value[T]]], Vector[T => T]]]
+        implicitly[RawLinkPoly.SplitCase[Node[T, List[Value[T]]], Vector[Node[T, T]]]]
 
         f |> gs
         f |> ys
@@ -329,14 +302,10 @@ object JoinTest {
 
         val g = (x: Vector[T]) => x
 
-        val x = new Node[T, T] {
-            def apply(x: T) = f(x)
-        }
+        val x = Node(f)
         val xs = List(x, x)
 
-        val y = new Node[Vector[T], Vector[T]] {
-            def apply(x: Vector[T]) = g(x)
-        }
+        val y = Node(g)
 
         implicitly[RawLinkPoly.JoinCase[List[T => T], Vector[T] => T]]
         implicitly[RawLinkPoly.JoinCase[List[T => T], Node[Vector[T], T]]]
@@ -357,24 +326,20 @@ object JoinRTest {
 
         type T = Double
 
-        val f = (x: T) => Push(x)
+        val f = (x: T) => Value(x)
         val fs = List(f, f)
 
         val g = (x: Vector[T]) => x
 
-        val x = new Node[T, R[T]] {
-            def apply(x: T) = f(x)
-        }
+        val x = Node(f)
         val xs = List(x, x)
 
-        val y = new Node[Vector[T], Vector[T]] {
-            def apply(x: Vector[T]) = g(x)
-        }
+        val y = Node(g)
 
-        implicitly[RawLinkPoly.JoinCase[List[T => Push[T]], Vector[T] => T]]
-        implicitly[RawLinkPoly.JoinCase[List[Node[T, Push[T]]], Node[Vector[T], T]]]
-        implicitly[RawLinkPoly.JoinCase[List[T => Push[T]], Vector[T] => T]]
-        implicitly[RawLinkPoly.JoinCase[List[Node[T, Push[T]]], Node[Vector[T], T]]]
+        implicitly[RawLinkPoly.JoinCase[List[T => Value[T]], Vector[T] => T]]
+        implicitly[RawLinkPoly.JoinCase[List[Node[T, Value[T]]], Node[Vector[T], T]]]
+        implicitly[RawLinkPoly.JoinCase[List[T => Value[T]], Vector[T] => T]]
+        implicitly[RawLinkPoly.JoinCase[List[Node[T, Value[T]]], Node[Vector[T], T]]]
 
         fs |> g
         fs |> y
@@ -434,9 +399,7 @@ object HSplitNilTest {
 
         val gs = HNil
 
-        val x = new Node[T, HNil] {
-            def apply(x: T) = f(x)
-        }
+        val x = Node(f)
 
         val ys = HNil
 
@@ -461,16 +424,10 @@ object HSplitTest {
         val g1 = identity[Double] _
         val gs = g0 :: g1 :: HNil
 
-        val x = new Node[Int, Int :: Double :: HNil] {
-            def apply(x: Int) = f(x)
-        }
+        val x = Node(f)
 
-        val y0 = new Node[Int, Int] {
-            def apply(x: Int) = x
-        }
-        val y1: Node[Double, Double] = new Node[Double, Double] {
-            def apply(x: Double) = x
-        }
+        val y0 = Node(g0)
+        val y1 = Node(g1)
         val ys = y0 :: y1 :: HNil
 
         implicitly[RawLinkPoly.HSplitCase[Int => (Int :: Double :: HNil), (Int => Int) :: (Double => Double) :: HNil]]
@@ -490,22 +447,16 @@ object HSplitRTest {
         val graph = new ArrowGraph
         import graph._
 
-        val f = (x: Int) => Push(1) :: Push(3.0) :: HNil
+        val f = (x: Int) => Value(1) :: Value(3.0) :: HNil
 
         val g0 = identity[Int] _
         val g1 = identity[Double] _
         val gs = g0 :: g1 :: HNil
 
-        val x = new Node[Int, R[Int] :: R[Double] :: HNil] {
-            def apply(x: Int) = f(x)
-        }
+        val x = Node(f)
 
-        val y0 = new Node[Int, Int] {
-            def apply(x: Int) = x
-        }
-        val y1: Node[Double, Double] = new Node[Double, Double] {
-            def apply(x: Double) = x
-        }
+        val y0 = Node(g0)
+        val y1 = Node(g1)
         val ys = y0 :: y1 :: HNil
 
         implicitly[RawLinkPoly.HSplitCase[Int => (R[Int] :: Double :: HNil), (Int => Int) :: (Double => Double) :: HNil]]
@@ -531,9 +482,7 @@ object HJoinNil {
 
         val xs = HNil
 
-        val y = new Node[HNil, HNil] {
-            def apply(x: HNil) = g(x)
-        }
+        val y = Node(g)
 
         implicitly[RawLinkPoly.HJoinCase[HNil, HNil => HNil]]
         implicitly[RawLinkPoly.HJoinCase[HNil, Node[HNil, HNil]]]
@@ -555,14 +504,10 @@ object HJoin {
 
         val g = (x: Int :: HNil) => 0
 
-        val x0 = new Node[Int, Int] {
-            def apply(x: Int) = f0(x)
-        }
+        val x0 = Node(f0)
         val xs = x0 :: HNil
 
-        val y = new Node[Int :: HNil, Int] {
-            def apply(x: Int :: HNil) = g(x)
-        }
+        val y = Node(g)
 
         implicitly[RawLinkPoly.HJoinCase[(Int => Int) :: HNil, (Int :: HNil) => Int]]
         implicitly[RawLinkPoly.HJoinCase[(Int => Int) :: HNil, Node[Int :: HNil, Int]]]
@@ -581,19 +526,15 @@ object HJoinR {
         val graph = new ArrowGraph
         import graph._
 
-        val f0 = (x: Int) => Push(x)
+        val f0 = (x: Int) => Value(x)
         val fs = f0 :: HNil
 
         val g = (x: Int :: HNil) => 0
 
-        val x0 = new Node[Int, R[Int]] {
-            def apply(x: Int) = f0(x)
-        }
+        val x0 = Node(f0)
         val xs = x0 :: HNil
 
-        val y = new Node[Int :: HNil, Int] {
-            def apply(x: Int :: HNil) = g(x)
-        }
+        val y = Node(g)
 
         implicitly[RawLinkPoly.HJoinCase[(Int => R[Int]) :: HNil, (Int :: HNil) => Int]]
         implicitly[RawLinkPoly.HJoinCase[(Int => R[Int]) :: HNil, Node[Int :: HNil, Int]]]
@@ -634,20 +575,12 @@ object HMatchTest {
         val g1 = (x: Double) => x
         val gs = g0 :: g1 :: HNil
 
-        val x0 = new Node[Int, Int] {
-            def apply(x: Int) = f0(x)
-        }
-        val x1 = new Node[Double, Double] {
-            def apply(x: Double) = f1(x)
-        }
+        val x0 = Node(f0)
+        val x1 = Node(f1)
         val xs = x0 :: x1 :: HNil
 
-        val y0 = new Node[Int, Int] {
-            def apply(x: Int) = g0(x)
-        }
-        val y1 = new Node[Double, Double] {
-            def apply(x: Double) = g1(x)
-        }
+        val y0 = Node(g0)
+        val y1 = Node(g1)
         val ys = y0 :: y1 :: HNil
 
         implicitly[RawLinkPoly.HMatchCase[(Int => Int) :: (Double => Double) :: HNil, (Int => Int) :: (Double => Double) :: HNil]]

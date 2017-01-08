@@ -26,16 +26,34 @@ package arrow
 
 sealed trait R[T]
 
-sealed trait Outputable[T] extends R[T]
+//sealed trait Reusable[T] extends Inputable[T]
 
-sealed trait Inputable[T] extends R[T]
+//sealed trait Replaceable[T] extends Inputable[T]
 
-final case class Push[T](value: T) extends Outputable[T]
+sealed trait Inputable[T] extends R[T] {
+    val reusable: Boolean
+    val replaceable: Boolean
+}
 
-final case class Put[T](value: T) extends Outputable[T]
+final case class Value[T]
+(value: T,
+ reusable: Boolean = false,
+ replaceable: Boolean = false) extends Inputable[T] {
+}
 
-final case class Finish[T]() extends Outputable[T]
+final case class Ignore[T]() extends R[T]
 
-final case class Empty[T]() extends Outputable[T]
+final case class Finish[T]() extends Inputable[T] {
+    override val reusable: Boolean = false
+    override val replaceable: Boolean = false
+}
 
-final case class Break[T]() extends Outputable[T]
+final case class Break[T]() extends Inputable[T] {
+    override val reusable: Boolean = false
+    override val replaceable: Boolean = false
+}
+
+final case class Empty[T]() extends Inputable[T] {
+    override val reusable: Boolean = false
+    override val replaceable: Boolean = false
+}

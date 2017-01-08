@@ -47,8 +47,8 @@ object OneToOneRTest {
         val graph = new ArrowGraph
         import graph._
 
-        val f = (x: Int) => Push(x)
-        val g = (y: Int) => Push(y)
+        val f = (x: Int) => Value(x)
+        val g = (y: Int) => Value(y)
 
         f |> g
 
@@ -76,7 +76,7 @@ object BroadcastRTest {
         val graph = new ArrowGraph
         import graph._
 
-        val f = (x: Int) => Push(x)
+        val f = (x: Int) => Value(x)
         val g = (y: Int) => y
         val gs = List(g, g, g)
 
