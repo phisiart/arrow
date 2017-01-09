@@ -50,8 +50,8 @@ object OneToOneRChainTest {
         import graph._
 
         val f = (x: Int) => Value(x)
-        val g = (x: Int) => Finish[Int]()
-        val h = (x: Int) => Finish[Int]()
+        val g = (_: Int) => Finish[Int]()
+        val h = (_: Int) => Finish[Int]()
 
         (f |> g) |> h
         f |> (g |> h)

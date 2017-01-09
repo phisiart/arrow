@@ -32,19 +32,19 @@ import scala.language.postfixOps
 object GraphDrawer {
     def getProcessorName(processor: Processor): String = {
         val _ = processor match {
-            case NodeProcessor(node, id) =>
+            case NodeProcessor(_, id) =>
                 s"Node[$id]"
 
-            case Splitter(out) =>
+            case Splitter(_, _) =>
                 "S"
 
-            case Joiner(in) =>
+            case Joiner(_, _) =>
                 "J"
 
-            case HSplitter(out) =>
+            case HSplitter(_, _) =>
                 "HS"
 
-            case HJoiner(in) =>
+            case HJoiner(_, _) =>
                 "HJ"
         }
 
@@ -53,19 +53,19 @@ object GraphDrawer {
 
     def getProcessorShape(processor: Processor): String = {
         processor match {
-            case NodeProcessor(node, id) =>
+            case NodeProcessor(_, _) =>
                 "circle"
 
-            case Splitter(out) =>
+            case Splitter(_, _) =>
                 "record"
 
-            case Joiner(in) =>
+            case Joiner(_, _) =>
                 "record"
 
-            case HSplitter(out) =>
+            case HSplitter(_, _) =>
                 "record"
 
-            case HJoiner(in) =>
+            case HJoiner(_, _) =>
                 "record"
         }
     }
@@ -107,7 +107,7 @@ object GraphDrawer {
                 case HJoinerTlIn(hJoiner) =>
                     hJoiner
 
-                case JoinerIn(joiner, idx) =>
+                case JoinerIn(joiner, _) =>
                     joiner
             }
 

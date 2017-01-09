@@ -83,7 +83,7 @@ object HSplitTest {
         val graph = new ArrowGraph
         import graph._
 
-        val f = (x: Int) => 1 :: 3.0 :: HNil
+        val f = (_: Int) => 1 :: 3.0 :: HNil
 
         val g0 = identity[Int] _
         val g1 = identity[Double] _
@@ -105,7 +105,7 @@ object HJoinTest {
         val f1 = (x: Int) => x
         val fs = f0 :: f1 :: HNil
 
-        val g = (xs: Int :: Int :: HNil) => 0
+        val g = (_: Int :: Int :: HNil) => 0
 
         fs |> g
 
@@ -139,7 +139,7 @@ object JoinTest {
         val f = (x: Int) => x
         val fs = List(f, f, f)
 
-        val g = (xs: List[Int]) => 0
+        val g = (_: List[Int]) => 0
 
         fs |> g
 

@@ -39,9 +39,9 @@ object OneToOneTest {
         type O = Int
         val o = 1
 
-        val f = (x: I) => m
+        val f = (_: I) => m
 
-        val g = (x: M) => o
+        val g = (_: M) => o
 
         val x = Node(f)
 
@@ -83,9 +83,9 @@ object OneToOneRTest {
         type O = Int
         val o = 1
 
-        val f = (x: I) => rm
+        val f = (_: I) => rm
 
-        val g = (x: M) => o
+        val g = (_: M) => o
 
         val x = Node(f)
 
@@ -116,10 +116,10 @@ object BroadcastTest {
         type S[X] = List[X]
         def s[A](elems: A*): S[A] = elems.toList
 
-        val f = (x: I) => m
+        val f = (_: I) => m
         val x = Node(f)
 
-        val g = (x: M) => o
+        val g = (_: M) => o
         val gs = s(g, g)
 
         val y = Node(g)
@@ -134,6 +134,18 @@ object BroadcastTest {
         f |> ys
         x |> gs
         x |> ys
+    }
+}
+
+object EvilBroadcastTest {
+    def main(args: Array[String]): Unit = {
+        val graph = new ArrowGraph
+        import graph._
+
+        val f = identity[Int] _
+        val g = List(identity[Int] _)
+
+        f |> g
     }
 }
 
@@ -154,10 +166,10 @@ object BroadcastRTest {
 
         type T = Int
 
-        val f = (x: I) => r(m)
+        val f = (_: I) => r(m)
         val x = Node(f)
 
-        val g = (x: M) => o
+        val g = (_: M) => o
         val gs = Vector(g, g)
 
         val y = Node(g)
@@ -297,10 +309,10 @@ object JoinTest {
 
         type T = Double
 
-        val f = (x: T) => x
+        val f = identity[T] _
         val fs = List(f, f)
 
-        val g = (x: Vector[T]) => x
+        val g = identity[Vector[T]] _
 
         val x = Node(f)
         val xs = List(x, x)
@@ -329,7 +341,7 @@ object JoinRTest {
         val f = (x: T) => Value(x)
         val fs = List(f, f)
 
-        val g = (x: Vector[T]) => x
+        val g = identity[Vector[T]] _
 
         val x = Node(f)
         val xs = List(x, x)
@@ -348,46 +360,42 @@ object JoinRTest {
     }
 }
 
-//object MatchTest {
-//    def main(args: Array[String]) {
-//        val graph = new ArrowGraph
-//        import graph._
-//
-//        type I = Int
-//        type M = Int
-//        val m = 1
-//        type O = Int
-//        val o = 1
-//        type S[X] = Vector[X]
-//        def s[A](elems: A*): S[A] = elems.toVector
-//
-//        val f = (x: Int) => m
-//        val fs = Vector(f, f)
-//
-//        val x = new Node[I, M] {
-//            def apply(x: I) = f(x)
-//        }
-//        val xs = Vector(x, x)
-//
-//        val g = (x: Int) => o
-//        val gs = Vector(g, g)
-//
-//        val y = new Node[M, O] {
-//            def apply(x: M) = g(x)
-//        }
-//        val ys = s(y, y)
-//
-//        implicitly[RawLinkPoly.Case[S[I => M], S[M => O]]]
-//        implicitly[RawLinkPoly.MatchCase[S[Node[I, M]], S[Node[M, O]]]]
-//        implicitly[RawLinkPoly.MatchCase[S[I => M], S[M => O]]]
-//        implicitly[RawLinkPoly.MatchCase[S[Node[I, M]], S[Node[M, O]]]]
-//
-//        fs |> gs
-//        fs |> ys
-//        xs |> gs
-//        xs |> ys
-//    }
-//}
+object MatchTest2 {
+    def main(args: Array[String]) {
+        val graph = new ArrowGraph
+        import graph._
+
+        type I = Int
+        type M = Int
+        val m = 1
+        type O = Int
+        val o = 1
+        type S[X] = Vector[X]
+        def s[A](elems: A*): S[A] = elems.toVector
+
+        val f = (_: Int) => m
+        val fs = Vector(f, f)
+
+        val x = Node(f)
+        val xs = Vector(x, x)
+
+        val g = (_: Int) => o
+        val gs = Vector(g, g)
+
+        val y = Node(g)
+        val ys = s(y, y)
+
+        implicitly[RawLinkPoly.Case[S[I => M], S[M => O]]]
+        implicitly[RawLinkPoly.MatchCase[S[Node[I, M]], S[Node[M, O]]]]
+        implicitly[RawLinkPoly.MatchCase[S[I => M], S[M => O]]]
+        implicitly[RawLinkPoly.MatchCase[S[Node[I, M]], S[Node[M, O]]]]
+
+        fs |> gs
+        fs |> ys
+        xs |> gs
+        xs |> ys
+    }
+}
 
 object HSplitNilTest {
     def main(args: Array[String]) {
@@ -395,7 +403,7 @@ object HSplitNilTest {
         import graph._
 
         type T = Double
-        val f = (x: T) => HNil
+        val f = (_: T) => HNil
 
         val gs = HNil
 
@@ -418,7 +426,7 @@ object HSplitTest {
         val graph = new ArrowGraph
         import graph._
 
-        val f = (x: Int) => 1 :: 3.0 :: HNil
+        val f = (_: Int) => 1 :: 3.0 :: HNil
 
         val g0 = identity[Int] _
         val g1 = identity[Double] _
@@ -447,7 +455,7 @@ object HSplitRTest {
         val graph = new ArrowGraph
         import graph._
 
-        val f = (x: Int) => Value(1) :: Value(3.0) :: HNil
+        val f = (_: Int) => Value(1) :: Value(3.0) :: HNil
 
         val g0 = identity[Int] _
         val g1 = identity[Double] _
@@ -502,7 +510,7 @@ object HJoin {
         val f0 = identity[Int] _
         val fs = f0 :: HNil
 
-        val g = (x: Int :: HNil) => 0
+        val g = (_: Int :: HNil) => 0
 
         val x0 = Node(f0)
         val xs = x0 :: HNil
@@ -529,7 +537,7 @@ object HJoinR {
         val f0 = (x: Int) => Value(x)
         val fs = f0 :: HNil
 
-        val g = (x: Int :: HNil) => 0
+        val g = (_: Int :: HNil) => 0
 
         val x0 = Node(f0)
         val xs = x0 :: HNil
@@ -614,14 +622,13 @@ object MatchTest {
         val graph = new ArrowGraph
         import graph._
 
-        val f = (x: Int) => x
-        val g = (x: Int) => x
+        val f = identity[Int] _
+        val g = identity[Int] _
 
         val fs = List(f, f)
         val gs = List(g, g)
 
         implicitly[RawLinkPoly.MatchCase[List[Int => Int], List[Int => Int]]]
-
 
         fs |> gs
     }

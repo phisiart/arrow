@@ -34,23 +34,41 @@ sealed trait ProcessorInfo
 
 final class SourceInfo[O] extends ProcessorInfo
 
-final class SingleInputInfo[I] extends ProcessorInfo {
-    val inputChan: Channel[I] = new Channel[I]
+final class SingleInputInfo[I]
+(recorder: Option[Recorder],
+ replayer: Option[Replayer]) extends ProcessorInfo {
+
+    val inputChan: Channel[I] = new Channel[I](recorder, replayer)
 }
 
-final class JoinerInfo[I, Is](numInputs: Int) extends ProcessorInfo {
+final class JoinerInfo[I, Is]
+(numInputs: Int,
+ recorder: Option[Recorder],
+ replayer: Option[Replayer]) extends ProcessorInfo {
+
     val inputChans: IndexedSeq[Channel[I]] =
-        IndexedSeq.fill(this.numInputs)(new Channel[I])
+        IndexedSeq.fill(this.numInputs)(new Channel[I](recorder, replayer))
 }
 
-final class HJoinerInfo[IH, IT <: HList, Is <: HList] extends ProcessorInfo {
-    val hdInputChan: Channel[IH] = new Channel[IH]
-    val tlInputChan: Channel[IT] = new Channel[IT]
+final class HJoinerInfo[IH, IT <: HList, Is <: HList]
+(recorder: Option[Recorder],
+ replayer: Option[Replayer])extends ProcessorInfo {
+
+    val hdInputChan: Channel[IH] = new Channel[IH](recorder, replayer)
+    val tlInputChan: Channel[IT] = new Channel[IT](recorder, replayer)
 }
 
-class Runtime[RetType](val repr: Repr, val drainProcessor: DrainProcessor[RetType]) {
+class Runtime[RetType]
+(val repr: Repr,
+ val drainProcessor: DrainProcessor[RetType],
+ doRecord: Boolean = true,
+ replay: Option[BufferedIterator[Int]] = None
+) {
     private val log = Logger.getLogger("runtime")
     log.setLevel(Level.ALL)
+
+    private val recorder = if (doRecord) Some(new Recorder) else None
+    private val replayer = replay.map(new Replayer(_))
 
     // Create all the channels
     val processorInfos2: IndexedSeq[ProcessorInfo] = {
@@ -84,34 +102,34 @@ class Runtime[RetType](val repr: Repr, val drainProcessor: DrainProcessor[RetTyp
 
         override def VisitDrainProcessor[T](processor: DrainProcessor[T]): ProcessorInfo = {
             log.info("Created SingleInputInfo for DrainProcessor")
-            new SingleInputInfo[T]
+            new SingleInputInfo[T](recorder, replayer)
         }
 
         override def VisitNodeProcessor[I, O](processor: NodeProcessor[I, O]): ProcessorInfo = {
             log.info("Created SingleInputInfo for NodeProcessor")
-            new SingleInputInfo[I]
+            new SingleInputInfo[I](recorder, replayer)
         }
 
         override def VisitSplitter[O, Os](processor: Splitter[O, Os]): ProcessorInfo = {
             log.info("Created SingleInputInfo for Splitter")
-            new SingleInputInfo[O]
+            new SingleInputInfo[O](recorder, replayer)
         }
 
         override def VisitJoiner[I, Is, S[_]](processor: Joiner[I, Is, S]): ProcessorInfo = {
             log.info("Created JoinerInfo")
-            new JoinerInfo[I, Is](processor.pullFroms.length)
+            new JoinerInfo[I, Is](processor.pullFroms.length, recorder, replayer)
         }
 
         override def VisitHSplitter[OH, OT <: HList, Os <: HList]
         (processor: HSplitter[OH, OT, Os]): ProcessorInfo = {
             log.info("Created HSplitterInfo")
-            new SingleInputInfo[Os]
+            new SingleInputInfo[Os](recorder, replayer)
         }
 
         override def VisitHJoiner[IH, IT <: HList, Is <: HList]
         (processor: HJoiner[IH, IT, Is]): ProcessorInfo = {
             log.info("Created HJoinerInfo")
-            new HJoinerInfo[IH, IT, Is]
+            new HJoinerInfo[IH, IT, Is](recorder, replayer)
         }
     }
 
@@ -145,7 +163,7 @@ class Runtime[RetType](val repr: Repr, val drainProcessor: DrainProcessor[RetTyp
 
             log.info("Created SourceProcessorRunnable")
 
-            val runnable = SourceProcessorRunnable[T](processor.stream, outputChannels)
+            val runnable = SourceProcessorRunnable[T](processor.id, processor.stream, outputChannels)
 
             pool.submit(runnable)
 
@@ -155,7 +173,7 @@ class Runtime[RetType](val repr: Repr, val drainProcessor: DrainProcessor[RetTyp
         override def VisitDrainProcessor[T](processor: DrainProcessor[T]): Option[Future[IndexedSeq[Type]]] = {
             val inputChan = getSingleInputInfo(processor).inputChan
 
-            val runnable = DrainProcessorCallable[T](inputChan)
+            val runnable = DrainProcessorCallable[T](processor.id, inputChan)
 
             log.info("Created DrainProcessorCallable")
 
@@ -169,7 +187,7 @@ class Runtime[RetType](val repr: Repr, val drainProcessor: DrainProcessor[RetTyp
                 .pushTo
                 .map(_.Visit(SubscriptionFromToChannelIn))
 
-            val runnable = NodeRunnable(processor.node, inputChan, outputChannels)
+            val runnable = NodeRunnable(processor.id, processor.node, inputChan, outputChannels)
 
             log.info("Created NodeRunnable")
 
@@ -186,7 +204,7 @@ class Runtime[RetType](val repr: Repr, val drainProcessor: DrainProcessor[RetTyp
                 .pushTos
                 .map(_.map(_.Visit(SubscriptionFromToChannelIn)))
 
-            val runnable = SplitterRunnable[O, Os](inputChan, outputChans)(processor.os)
+            val runnable = SplitterRunnable[O, Os](processor.id, inputChan, outputChans)(processor.os)
 
             log.info("Created SplitterRunnable")
 
@@ -204,7 +222,7 @@ class Runtime[RetType](val repr: Repr, val drainProcessor: DrainProcessor[RetTyp
                 .map(_.Visit(SubscriptionFromToChannelIn))
 
             val runnable = JoinerRunnable[I, Is, S](
-                inputChans, outputChans
+                processor.id, inputChans, outputChans
             )(processor.is, processor.cbf)
 
             log.info("Created JoinerRunnable")
@@ -225,7 +243,7 @@ class Runtime[RetType](val repr: Repr, val drainProcessor: DrainProcessor[RetTyp
                 .pushToTl.map(_.Visit(SubscriptionFromToChannelIn))
 
             val runnable = HSplitterRunnable[OH, OT, Os](
-                inputChan, hOutputChans, tOutputChans
+                processor.id, inputChan, hOutputChans, tOutputChans
             )(processor.o)
 
             log.info("Created HSplitterRunnable")
@@ -247,7 +265,7 @@ class Runtime[RetType](val repr: Repr, val drainProcessor: DrainProcessor[RetTyp
                 .pushTo
                 .map(_.Visit(SubscriptionFromToChannelIn))
 
-            val runnable = HJoinerRunnable(hInputChan, tInputChan, outputChans)(processor.i)
+            val runnable = HJoinerRunnable(processor.id, hInputChan, tInputChan, outputChans)(processor.i)
 
             log.info("Created HJoinerRunnable")
 
@@ -255,6 +273,26 @@ class Runtime[RetType](val repr: Repr, val drainProcessor: DrainProcessor[RetTyp
 
             None
         }
+    }
+
+    def record(): Future[(IndexedSeq[RetType], Seq[Int])] = {
+        val future = repr
+            .processors
+            .map(_.Visit(new CallableCreator[RetType]))
+            .find(_.isDefined)
+            .get
+            .get
+
+        val ret = pool.submit(new Callable[(IndexedSeq[RetType], Seq[Int])] {
+            override def call(): (IndexedSeq[RetType], Seq[Int]) = {
+                val ret = future.get()
+                (ret, recorder.get.record)
+            }
+        })
+
+        pool.shutdown()
+
+        ret
     }
 
     def run(): Future[IndexedSeq[RetType]] = {
@@ -272,6 +310,7 @@ class Runtime[RetType](val repr: Repr, val drainProcessor: DrainProcessor[RetTyp
 }
 
 object Runtime {
+    val BUF_SIZE = 100
     val log: Logger = Logger.getLogger("runtime")
     log.setLevel(Level.ALL)
 }

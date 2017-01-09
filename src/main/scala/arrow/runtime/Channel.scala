@@ -48,17 +48,17 @@ import scala.collection.mutable.ArrayBuffer
   */
 
 sealed trait ChannelIn[T] {
-    def push(msg: R[T]): Unit
+    def push(msg: R[T], id: Int): Unit
 }
 
 final case class ChannelInImpl[T](chan: Channel[T]) extends ChannelIn[T] {
-    override def push(msg: R[T]): Unit = {
-        chan.push(msg)
+    override def push(msg: R[T], id: Int): Unit = {
+        chan.push(msg, id)
     }
 }
 
 final case class ChannelInRImpl[T, RT](chan: Channel[T])(implicit rt: RT <:< R[T]) extends ChannelIn[RT] {
-    override def push(msg: R[RT]): Unit = {
+    override def push(msg: R[RT], id: Int): Unit = {
         chan.push(msg match {
             case Value(value, _, _) =>
                 rt(value)
@@ -74,7 +74,7 @@ final case class ChannelInRImpl[T, RT](chan: Channel[T])(implicit rt: RT <:< R[T
 
             case Break() =>
                 Break[T]()
-        })
+        }, id)
     }
 }
 
@@ -145,64 +145,99 @@ final class CircularDeque[T](val capacity: Int) {
     }
 }
 
-class Channel[T] {
-    val BUF_SIZE = 100
+class Channel[T]
+(private val recorder: Option[Recorder],
+ private val replayer: Option[Replayer]) {
 
-    val fuck = new util.ArrayDeque[Int](BUF_SIZE)
+    val fuck = new util.ArrayDeque[Int](Runtime.BUF_SIZE)
 
-    val deque = new util.ArrayDeque[Inputable[T]](BUF_SIZE)
+    val deque = new util.ArrayDeque[Inputable[T]](Runtime.BUF_SIZE)
     private val lock = new ReentrantLock()
     private val notFull = this.lock.newCondition()
     private val notEmpty = this.lock.newCondition()
 
-    def push(msg: R[T]): Unit = {
-        msg match {
-            case msg: Inputable[T] =>
-                this.lock.lock()
-                try {
-                    while (this.deque.size() == BUF_SIZE &&
-                        !this.deque.peekLast().replaceable) {
-                        this.notFull.await()
-                    }
-
-                    if (this.deque.size() != BUF_SIZE) {
-                        this.deque.offerLast(msg)
-                    } else {
-                        this.deque.removeLast()
-                        this.deque.offerLast(msg)
-                    }
-
-                    this.notEmpty.signal()
-
-                } finally {
-                    this.lock.unlock()
-                }
-
-            case Ignore() =>
-                // Ignore
-        }
-
-        Runtime.log.info(s"Pushed $msg")
-    }
-
-    def pull(): Inputable[T] = {
-        this.lock.lock()
+    def push(msg: R[T], id: Int): Unit = {
+        // Before we do anything, acquire replayer lock.
+        // In this way we can avoid deadlock.
+        this.replayer.foreach(_.lock(id))
         try {
-            while (this.deque.isEmpty) {
-                this.notEmpty.await()
+            msg match {
+                case msg: Inputable[T] =>
+                    this.lock.lock()
+                    try {
+                        while (this.deque.size() == Runtime.BUF_SIZE &&
+                            !this.deque.peekLast().replaceable) {
+                            this.notFull.await()
+                        }
+
+                        // When we can actually make progress,
+                        // acquire recorder lock.
+                        // In this way we can avoid deadlock.
+                        this.recorder.foreach(_.lock(id))
+                        try {
+                            if (this.deque.size() != Runtime.BUF_SIZE) {
+                                this.deque.offerLast(msg)
+                            } else {
+                                this.deque.removeLast()
+                                this.deque.offerLast(msg)
+                            }
+                            Runtime.log.info(s"[$id] Pushed [$msg]")
+
+                        } finally {
+                            this.recorder.foreach(_.unlock(id))
+                        }
+
+                        this.notEmpty.signal()
+
+                    } finally {
+                        this.lock.unlock()
+                    }
+
+                case Ignore() =>
+                // Ignore
             }
 
-            val front = this.deque.peekFirst()
-            if (!front.reusable) {
-                this.deque.removeFirst()
-            }
 
-            this.notFull.signal()
-
-            front
 
         } finally {
-            this.lock.unlock()
+            this.replayer.foreach(_.unlock(id))
+        }
+    }
+
+    def pull(id: Int): Inputable[T] = {
+        // Before we do anything, acquire replayer lock
+        // In this way we can avoid deadlock
+        this.replayer.foreach(_.lock(id))
+        try {
+            this.lock.lock()
+            try {
+                while (this.deque.isEmpty) {
+                    this.notEmpty.await()
+                }
+
+                val front = this.deque.peekFirst()
+                // When we can actually make progress, acquire recorder lock.
+                // In this way we can avoid deadlock.
+                this.recorder.foreach(_.lock(id))
+                try {
+                    if (!front.reusable) {
+                        this.deque.removeFirst()
+                    }
+                    Runtime.log.info(s"[$id] Pulled [$front]")
+                } finally {
+                    this.recorder.foreach(_.unlock(id))
+                }
+
+                this.notFull.signal()
+
+                front
+
+            } finally {
+                this.lock.unlock()
+            }
+
+        } finally {
+            this.replayer.foreach(_.unlock(id))
         }
     }
 }

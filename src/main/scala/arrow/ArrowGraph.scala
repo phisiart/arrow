@@ -178,16 +178,36 @@ class ArrowGraph {
         LinkableWrapper(linkable)
 
     def run[T, P]
-    (producer: P)
+    (producer: P,
+     record: Boolean = false,
+     replay: Option[BufferedIterator[Int]] = None)
     (implicit genOut: P Outputs T): Future[IndexedSeq[T]] = {
         val out = genOut(producer)
         val drainProcessor = repr.makeDrainProcessor[T]()
         val in = repr.makeDrainProcessorIn[T](drainProcessor)
         repr.insertSubscription(out, in)
 
-        val runtime = new Runtime[T](this.repr, drainProcessor)
+        val runtime = new Runtime[T](
+            this.repr, drainProcessor, record, replay
+        )
 
         runtime.run()
+    }
+
+    def record[T, P]
+    (producer: P,
+     replay: Option[BufferedIterator[Int]] = None)
+    (implicit genOut: P Outputs T): Future[(IndexedSeq[T], Seq[Int])] = {
+        val out = genOut(producer)
+        val drainProcessor = repr.makeDrainProcessor[T]()
+        val in = repr.makeDrainProcessorIn[T](drainProcessor)
+        repr.insertSubscription(out, in)
+
+        val runtime = new Runtime[T](
+            this.repr, drainProcessor, doRecord = true, replay
+        )
+
+        runtime.record()
     }
 
     /**
@@ -310,8 +330,8 @@ class ArrowGraph {
         /** For [[implicitly]] testing */
         abstract class BroadcastCase[P, Cs] extends Case[P, Cs]
 
-        final class BroadcastCaseImpl[P, O, Cs, C]
-        (implicit cs: Cs <:< Traversable[C], p: P Outputs O, link: LinkPoly.Case[P, C],
+        final class BroadcastCaseImpl[P, Cs, C]
+        (implicit cs: Cs <:< Traversable[C], link: LinkPoly.Case[P, C],
          p_mani: Manifest[P], cs_mani: Manifest[Cs], c_mani: Manifest[C])
         extends BroadcastCase[P, Cs] {
             DEBUG("[Broadcast]")
@@ -327,7 +347,7 @@ class ArrowGraph {
         implicit def Broadcast[P, O, Cs, C]
         (implicit cs: Cs <:< Traversable[C], p: P Outputs O, link: LinkPoly.Case[P, C],
          p_mani: Manifest[P], cs_mani: Manifest[Cs], c_mani: Manifest[C])
-        = new BroadcastCaseImpl[P, O, Cs, C]
+        = new BroadcastCaseImpl[P, Cs, C]
 
         // =====================================================================
         //  Merge
@@ -336,8 +356,8 @@ class ArrowGraph {
         /** For [[implicitly]] testing */
         abstract class MergeCase[Ps, C] extends Case[Ps, C]
 
-        final class MergeCaseImpl[Ps, P, C, I]
-        (implicit ps: Ps <:< Traversable[P], c: C Inputs I, link: LinkPoly.Case[P, C])
+        final class MergeCaseImpl[Ps, P, C]
+        (implicit ps: Ps <:< Traversable[P], link: LinkPoly.Case[P, C])
         extends MergeCase[Ps, C] {
             def apply(producers: Ps, consumer: C) {
                 DEBUG("[Collect]")
@@ -353,7 +373,7 @@ class ArrowGraph {
          ps: Ps <:< Traversable[P],
          c: C Inputs I,
          link: LinkPoly.Case[P, C])
-        = new MergeCaseImpl[Ps, P, C, I]
+        = new MergeCaseImpl[Ps, P, C]
 
         // =====================================================================
         //  Split
