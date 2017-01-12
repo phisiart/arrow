@@ -24,43 +24,31 @@
 
 package arrow_test.backend_test
 
-import java.util.concurrent.Executors
-
+import akka.actor.{ActorPath, ActorSelection}
 import arrow._
-import arrow.runtime._
 
-object RunnableTests {
+object DistributedTest {
     def main(args: Array[String]): Unit = {
-        val inputStream = Stream(1, 2, 3, 4)
-        val inputChan = new Channel[Int](None, None)
-        val inputRunnable = SourceProcessorRunnable(
-            id = 0,
-            inputStream,
-            IndexedSeq(ChannelInImpl(inputChan))
-        )
-        val succNode = new Node[Int, Int] {
-            override def apply(input: Int): Int = input + 1
-        }
-        val outputChan = new Channel[Int](None, None)
-        val succProcessorRunnable = LocalNodeRunnable(
-            id = 1,
-            succNode,
-            inputChan,
-            IndexedSeq(ChannelInImpl(outputChan))
-        )
-        val drainCallable = DrainProcessorCallable(
-            id = 2,
-            outputChan
-        )
+        val graph = new ArrowGraph
+        import graph._
 
-        val pool = Executors.newFixedThreadPool(4)
-        pool.submit(inputRunnable)
-        pool.submit(succProcessorRunnable)
-        val outputFuture = pool.submit(drainCallable)
+        val id = Node((x: Int) => {
+            Thread.sleep(100L)
+            println(s"id($x) = $x")
+            x
+        })
 
-        pool.shutdown()
+        val succ = Node((x: Int) => {
+            Thread.sleep(100L)
+            println(s"succ($x) = ${x + 1}")
+            x + 1
+        })
 
-        val output = outputFuture.get()
-        println(output)
+        Stream(1, 2, 3, 4, 5, 6, 7, 8, 9) |> id |> succ
+
+        val m = MASTER("127.0.0.1", "1234")
+        val w1 = WORKER("127.0.0.1", "1235", "127.0.0.1:1234")
+        val w2 = WORKER("127.0.0.1", "1236", "127.0.0.1:1234")
+        val future = RUN(succ, masterHostPort = Some("127.0.0.1:1234"))
     }
 }

@@ -27,8 +27,17 @@ package arrow.runtime
 import java.util.concurrent._
 import java.util.logging.{Level, Logger}
 
+import akka.pattern._
+import akka.actor._
+import akka.util.Timeout
+
+import scala.concurrent.duration._
 import arrow.repr._
+import arrow.runtime.MasterWorkerProtocol._
+import com.typesafe.config.ConfigFactory
 import shapeless._
+
+import scala.concurrent.Await
 
 sealed trait ProcessorInfo
 
@@ -58,17 +67,45 @@ final class HJoinerInfo[IH, IT <: HList, Is <: HList]
     val tlInputChan: Channel[IT] = new Channel[IT](recorder, replayer)
 }
 
+class MyArrowWorker(val repr: Repr, masterPath: ActorPath)
+    extends AbstractWorker(masterPath) {
+
+    override def work(task: AbstractTask): Any = {
+        task match {
+            case Task(id, input) =>
+                this.repr.processors(id) match {
+                    case NodeProcessor(node, _) =>
+                        node.apply(input)
+
+                    case _ =>
+                        ???
+                }
+        }
+    }
+}
+
 class Runtime[RetType]
 (val repr: Repr,
  val drainProcessor: DrainProcessor[RetType],
  doRecord: Boolean = true,
- replay: Option[BufferedIterator[Int]] = None
+ replay: Option[BufferedIterator[Int]] = None,
+ val masterHostPort: Option[String] = None
 ) {
     private val log = Logger.getLogger("runtime")
     log.setLevel(Level.ALL)
 
     private val recorder = if (doRecord) Some(new Recorder) else None
     private val replayer = replay.map(new Replayer(_))
+
+    private val master = masterHostPort.map(hostPort => {
+        implicit val timeout = Timeout(100 seconds)
+
+        val system = Runtime.createRemoteSystem("127.0.0.1", "0")
+
+        val path = ActorPath.fromString(s"akka.tcp://arrow@$hostPort/user/master")
+
+        Await.result(system.actorSelection(path).resolveOne(), 100 seconds)
+    })
 
     // Create all the channels
     val processorInfos2: IndexedSeq[ProcessorInfo] = {
@@ -80,7 +117,7 @@ class Runtime[RetType]
         this.processorInfos2(processor.id)
     }
 
-    val pool: ExecutorService = Executors.newCachedThreadPool()
+    val executor: ExecutorService = Executors.newCachedThreadPool()
 
     def getSourceInfo[O](processor: SourceProcessor[O]): SourceInfo[O] =
         this.processorInfos(processor).asInstanceOf[SourceInfo[O]]
@@ -165,7 +202,7 @@ class Runtime[RetType]
 
             val runnable = SourceProcessorRunnable[T](processor.id, processor.stream, outputChannels)
 
-            pool.submit(runnable)
+            executor.submit(runnable)
 
             None
         }
@@ -177,7 +214,7 @@ class Runtime[RetType]
 
             log.info("Created DrainProcessorCallable")
 
-            Some(pool.submit(runnable).asInstanceOf[Future[IndexedSeq[Type]]])
+            Some(executor.submit(runnable).asInstanceOf[Future[IndexedSeq[Type]]])
         }
 
         override def VisitNodeProcessor[I, O](processor: NodeProcessor[I, O]): Option[Future[IndexedSeq[Type]]] = {
@@ -187,11 +224,18 @@ class Runtime[RetType]
                 .pushTo
                 .map(_.Visit(SubscriptionFromToChannelIn))
 
-            val runnable = NodeRunnable(processor.id, processor.node, inputChan, outputChannels)
+            val runnable = master match {
+                case Some(m) =>
+                    DistributedNodeRunnable(processor.id, processor.node, inputChan, outputChannels, m)
+
+                case None =>
+                    LocalNodeRunnable(processor.id, processor.node, inputChan, outputChannels)
+            }
+//            val runnable = LocalNodeRunnable(processor.id, processor.node, inputChan, outputChannels)
 
             log.info("Created NodeRunnable")
 
-            pool.submit(runnable)
+            executor.submit(runnable)
 
             None
         }
@@ -208,7 +252,7 @@ class Runtime[RetType]
 
             log.info("Created SplitterRunnable")
 
-            pool.submit(runnable)
+            executor.submit(runnable)
 
             None
         }
@@ -227,7 +271,7 @@ class Runtime[RetType]
 
             log.info("Created JoinerRunnable")
 
-            pool.submit(runnable)
+            executor.submit(runnable)
 
             None
         }
@@ -248,7 +292,7 @@ class Runtime[RetType]
 
             log.info("Created HSplitterRunnable")
 
-            pool.submit(runnable)
+            executor.submit(runnable)
 
             None
         }
@@ -269,7 +313,7 @@ class Runtime[RetType]
 
             log.info("Created HJoinerRunnable")
 
-            pool.submit(runnable)
+            executor.submit(runnable)
 
             None
         }
@@ -283,14 +327,14 @@ class Runtime[RetType]
             .get
             .get
 
-        val ret = pool.submit(new Callable[(IndexedSeq[RetType], Seq[Int])] {
+        val ret = executor.submit(new Callable[(IndexedSeq[RetType], Seq[Int])] {
             override def call(): (IndexedSeq[RetType], Seq[Int]) = {
                 val ret = future.get()
                 (ret, recorder.get.record)
             }
         })
 
-        pool.shutdown()
+        executor.shutdown()
 
         ret
     }
@@ -303,14 +347,37 @@ class Runtime[RetType]
             .get
             .get
 
-        pool.shutdown()
+        executor.shutdown()
 
         future
     }
 }
 
 object Runtime {
-    val BUF_SIZE = 100
+    val BUF_SIZE = 1
     val log: Logger = Logger.getLogger("runtime")
     log.setLevel(Level.ALL)
+
+    def createRemoteSystem(host: String, port: String): ActorSystem = {
+        val configString = s"""
+          akka {
+            loglevel = "INFO"
+            actor {
+              provider = remote
+            }
+            remote {
+              enabled-transports = ["akka.remote.netty.tcp"]
+              netty.tcp {
+                hostname = "$host"
+                port = $port
+              }
+              log-sent-messages = on
+              log-received-messages = on
+            }
+          }"""
+
+        val config = ConfigFactory.parseString(configString)
+
+        ActorSystem("arrow", config)
+    }
 }

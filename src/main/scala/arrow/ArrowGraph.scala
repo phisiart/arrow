@@ -26,6 +26,7 @@ package arrow
 
 import java.util.concurrent.Future
 
+import akka.actor._
 import arrow.repr._
 import arrow.runtime._
 import shapeless._
@@ -165,11 +166,13 @@ class ArrowGraph {
     = new StreamIsOut[O, S]
 
     case class LinkableWrapper[T](linkable: T) {
-        def |>[C](consumer: C)(implicit linkPoly: LinkPoly.Case[T, C]): linkPoly.R = {
+        def |>[C](consumer: C)(implicit linkPoly: LinkPoly.Case[T, C])
+        : linkPoly.R = {
             linkPoly.apply(this.linkable, consumer)
         }
 
-        def <|[P](producer: P)(implicit linkPoly: LinkPoly.Case[P, T]): linkPoly.R = {
+        def <|[P](producer: P)(implicit linkPoly: LinkPoly.Case[P, T])
+        : linkPoly.R = {
             linkPoly.apply(producer, this.linkable)
         }
     }
@@ -177,10 +180,10 @@ class ArrowGraph {
     implicit def GenLinkableWrapper[T](linkable: T): LinkableWrapper[T] =
         LinkableWrapper(linkable)
 
-    def run[T, P]
+    def RUN[T, P]
     (producer: P,
-     record: Boolean = false,
-     replay: Option[BufferedIterator[Int]] = None)
+     replay: Option[BufferedIterator[Int]] = None,
+     masterHostPort: Option[String] = None)
     (implicit genOut: P Outputs T): Future[IndexedSeq[T]] = {
         val out = genOut(producer)
         val drainProcessor = repr.makeDrainProcessor[T]()
@@ -188,15 +191,16 @@ class ArrowGraph {
         repr.insertSubscription(out, in)
 
         val runtime = new Runtime[T](
-            this.repr, drainProcessor, record, replay
+            this.repr, drainProcessor, false, replay, masterHostPort
         )
 
         runtime.run()
     }
 
-    def record[T, P]
+    def RECORD[T, P]
     (producer: P,
-     replay: Option[BufferedIterator[Int]] = None)
+     replay: Option[BufferedIterator[Int]] = None,
+     masterHostPort: Option[String] = None)
     (implicit genOut: P Outputs T): Future[(IndexedSeq[T], Seq[Int])] = {
         val out = genOut(producer)
         val drainProcessor = repr.makeDrainProcessor[T]()
@@ -204,10 +208,27 @@ class ArrowGraph {
         repr.insertSubscription(out, in)
 
         val runtime = new Runtime[T](
-            this.repr, drainProcessor, doRecord = true, replay
+            this.repr, drainProcessor, doRecord = true, replay, masterHostPort
         )
 
         runtime.record()
+    }
+
+    def MASTER(host: String, port: String): ActorRef = {
+        val system = Runtime.createRemoteSystem(host, port)
+
+        system.actorOf(Props[Master], "master")
+    }
+
+    def WORKER(host: String, port: String, masterHostPort: String): ActorRef = {
+        val system = Runtime.createRemoteSystem(host, port)
+
+        system.actorOf(Props(new MyArrowWorker(
+            this.repr,
+            ActorPath.fromString(
+                s"akka.tcp://arrow@$masterHostPort/user/master"
+            )
+        )))
     }
 
     /**
@@ -307,7 +328,10 @@ class ArrowGraph {
         abstract class OneToOneRCase[P, C] extends Case[P, C]
 
         final class OneToOneRCaseImpl[M, RM, P, C]
-        (implicit genIn: C Inputs M, genOut: P Outputs RM, rm: RM <:< R[M])
+        (implicit
+         genIn: C Inputs M,
+         genOut: P Outputs RM,
+         rm: RM <:< R[M])
         extends OneToOneRCase[P, C] {
             def apply(producer: P, consumer: C) {
                 DEBUG("[OneToOneR]")
@@ -319,7 +343,10 @@ class ArrowGraph {
         }
 
         implicit def GenOneToOneRCase[M, RM, P, C]
-        (implicit genIn: C Inputs M, genOut: P Outputs RM, rm: RM <:< R[M])
+        (implicit
+         genIn: C Inputs M,
+         genOut: P Outputs RM,
+         rm: RM <:< R[M])
         : OneToOneRCase[P, C]
         = new OneToOneRCaseImpl[M, RM, P, C]
 
@@ -331,11 +358,11 @@ class ArrowGraph {
         abstract class BroadcastCase[P, Cs] extends Case[P, Cs]
 
         final class BroadcastCaseImpl[P, Cs, C]
-        (implicit cs: Cs <:< Traversable[C], link: LinkPoly.Case[P, C],
-         p_mani: Manifest[P], cs_mani: Manifest[Cs], c_mani: Manifest[C])
+        (implicit
+         cs: Cs <:< Traversable[C],
+         link: LinkPoly.Case[P, C])
         extends BroadcastCase[P, Cs] {
             DEBUG("[Broadcast]")
-//            DEBUG(s"P = $p_mani, Cs = $cs_mani, c = $c_mani")
 
             def apply(producer: P, consumers: Cs) {
                 cs(consumers).map(consumer => {
@@ -345,8 +372,10 @@ class ArrowGraph {
         }
 
         implicit def Broadcast[P, O, Cs, C]
-        (implicit cs: Cs <:< Traversable[C], p: P Outputs O, link: LinkPoly.Case[P, C],
-         p_mani: Manifest[P], cs_mani: Manifest[Cs], c_mani: Manifest[C])
+        (implicit
+         cs: Cs <:< Traversable[C],
+         p: P Outputs O,
+         link: LinkPoly.Case[P, C])
         = new BroadcastCaseImpl[P, Cs, C]
 
         // =====================================================================
@@ -357,7 +386,9 @@ class ArrowGraph {
         abstract class MergeCase[Ps, C] extends Case[Ps, C]
 
         final class MergeCaseImpl[Ps, P, C]
-        (implicit ps: Ps <:< Traversable[P], link: LinkPoly.Case[P, C])
+        (implicit
+         ps: Ps <:< Traversable[P],
+         link: LinkPoly.Case[P, C])
         extends MergeCase[Ps, C] {
             def apply(producers: Ps, consumer: C) {
                 DEBUG("[Collect]")
@@ -384,8 +415,8 @@ class ArrowGraph {
 
         implicit def Split[Os, O, P, I, C, Cs]
         (implicit
-         genOut: (P Outputs Os), // Fix Os
-         ms: Os <:< Seq[O], // Fix O
+         genOut: (P Outputs Os),    // Fix Os
+         ms: Os <:< Seq[O],         // Fix O
          cs: Cs <:< Traversable[C], // Fix C
          link: LinkPoly.Case[Out[O], C]
         ): SplitCase[P, Cs]
@@ -417,18 +448,16 @@ class ArrowGraph {
           */
         implicit def Join[Ps, P, O, Is, S[_], I, C]
         (implicit
-         ps: Ps <:< Seq[P], // Fix P
+         ps: Ps <:< Seq[P],    // Fix P
          genIn: (C Inputs Is), // Fix Is
-         is: S[I] =:= Is, // Fix I, S
+         is: S[I] =:= Is,      // Fix I, S
          s: S[_] <:< Seq[_],
          cbf: CanBuildFrom[Nothing, I, S[I]],
-         link: LinkPoly.Case[P, In[I]],
-         mps: Manifest[Ps],
-         ms: Manifest[S[_]]
+         link: LinkPoly.Case[P, In[I]]
         ): JoinCase[Ps, C]
         = new JoinCase[Ps, C] {
             def apply(producers: Ps, consumer: C) {
-                DEBUG(s"[Join] ${ms}")
+                DEBUG(s"[Join]")
 
                 val in = genIn(consumer)
 
@@ -466,8 +495,8 @@ class ArrowGraph {
                             Cs <: HList, CH, CT <: HList]
         (implicit
          genOut: (P Outputs Os), // Fix Os
-         os: Os <:< (OH :: OT), // Fix OH & OT
-         cs: Cs <:< (CH :: CT), // Fix CH & CT
+         os: Os <:< (OH :: OT),  // Fix OH & OT
+         cs: Cs <:< (CH :: CT),  // Fix CH & CT
          linkHead: LinkPoly.Case[Out[OH], CH],
          linkTail: LinkPoly.Case[Out[OT], CT])
         : HSplitCase[P, Cs]
@@ -494,7 +523,9 @@ class ArrowGraph {
 
         /** [[HNil]] |> [[In]]<[[HNil]]> */
         final class HJoinNilCaseImpl[Ps <: HList, C, M <: HNil]
-        (implicit genIn: C Inputs M, m: HNil <:< M)
+        (implicit
+         genIn: C Inputs M,
+         m: HNil <:< M)
         extends HJoinCase[Ps, C] {
             def apply(producers: Ps, consumer: C) {
                 DEBUG("[HJoinNil]")
@@ -543,15 +574,9 @@ class ArrowGraph {
          m: (MH :: MT) <:< M,
          ps: Ps <:< (PH :: PT),
          linkHead: LinkPoly.Case[PH, In[MH]],
-         linkTail: LinkPoly.Case[PT, In[MT]],
-         mm: Manifest[M],
-         mmh: Manifest[MH],
-         mmt: Manifest[MT],
-         mm2: Manifest[shapeless.::[MH, MT]]
-        )
+         linkTail: LinkPoly.Case[PT, In[MT]])
         : HJoinCase[Ps, C]
         = {
-            println(mm)
             new HJoinCaseImpl[Ps, PH, PT, M, MH, MT, C]
         }
 

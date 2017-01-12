@@ -48,7 +48,7 @@ object FullTest {
 
         Stream(1, 2, 3, 4, 5, 6, 7, 8, 9) |> id |> succ
 
-        val future = run(succ)
+        val future = RUN(succ)
 
         println("Started")
 
@@ -69,7 +69,7 @@ object JoinerTest {
 
         inputs |> id
 
-        val future = run(id)
+        val future = RUN(id)
     }
 }
 
@@ -92,7 +92,7 @@ object SplitterTest {
 
         Stream(1, 2, 3, 4, 5) |> splitter |> ids
 
-        val future = run(id0)
+        val future = RUN(id0)
     }
 }
 
@@ -110,7 +110,7 @@ object HJoinerTest {
 
         inputs |> hJoiner
 
-        val future = run(hJoiner)
+        val future = RUN(hJoiner)
     }
 }
 
@@ -129,7 +129,7 @@ object HSplitterTest {
 
         inputs |> hSplitter |> (node :: HNil)
 
-        val future = run(node)
+        val future = RUN(node)
     }
 }
 

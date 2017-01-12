@@ -26,11 +26,18 @@ package arrow.runtime
 
 import java.util.concurrent.Callable
 
+import akka.actor.{ActorPath, ActorRef, ActorSelection, ActorSystem}
+import akka.pattern.ask
+import akka.util.Timeout
+
+import scala.concurrent.duration._
 import arrow._
+import arrow.runtime.MasterWorkerProtocol.Task
 import shapeless._
 
 import scala.collection.generic.CanBuildFrom
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.Await
 
 final case class SourceProcessorRunnable[T]
 (id: Int,
@@ -48,11 +55,13 @@ final case class SourceProcessorRunnable[T]
     }
 }
 
-final case class NodeRunnable[I, O]
-(id: Int,
- node: Node[I, O],
- inputChannel: Channel[I],
- outputChannels: IndexedSeq[ChannelIn[O]]) extends Runnable {
+abstract class AbstractNodeRunnable[I, O] extends Runnable {
+    val id: Int
+    val node: Node[I, O]
+    val inputChannel: Channel[I]
+    val outputChannels: IndexedSeq[ChannelIn[O]]
+
+    def apply(input: I): O
 
     override def run(): Unit = {
         var running = true
@@ -62,7 +71,7 @@ final case class NodeRunnable[I, O]
 
             val msg: R[O] = input match {
                 case Value(value, _, _) =>
-                    val output = this.node.apply(value)
+                    val output = this.apply(value)
                     Value(output)
 
 
@@ -82,6 +91,29 @@ final case class NodeRunnable[I, O]
     }
 }
 
+final case class LocalNodeRunnable[I, O]
+(id: Int,
+ node: Node[I, O],
+ inputChannel: Channel[I],
+ outputChannels: IndexedSeq[ChannelIn[O]]) extends AbstractNodeRunnable[I, O] {
+    override def apply(input: I): O = this.node.apply(input)
+}
+
+final case class DistributedNodeRunnable[I, O]
+(id: Int,
+ node: Node[I, O],
+ inputChannel: Channel[I],
+ outputChannels: IndexedSeq[ChannelIn[O]],
+ master: ActorRef) extends AbstractNodeRunnable[I, O] {
+    implicit val askTimeout = Timeout(10000000 second)
+
+//    val m = ActorSystem.
+
+    override def apply(input: I): O = {
+        Await.result(master ? Task(id, input), 1000000 seconds).asInstanceOf[O]
+    }
+}
+
 /**
   *  Os  +----------+  Seq[O]
   * ---> | Splitter | ------->
@@ -98,31 +130,29 @@ final case class SplitterRunnable[O, Os]
 
         while (running) {
             val input = this.inputChannel.pull(id)
-            input match {
-                case Value(value, _, _) =>
-                    val outputs = os(value)
 
-                    outputChannals
-                        .zip(outputs)
-                        .foreach(
-                        {
-                            case (channelIn, output) =>
-                                channelIn.foreach(_.push(Value(output), id))
-                        })
+            val outputs: Seq[R[O]] = input match {
+                case Value(value, _, _) =>
+                    os(value).map(Value(_))
 
                 case Finish() =>
-                    outputChannals
-                        .foreach(_.foreach(_.push(Finish(), id)))
                     running = false
+                    Seq.fill(this.outputChannals.size)(Finish())
 
                 case Empty() =>
-                    outputChannals
-                        .foreach(_.foreach(_.push(Empty(), id)))
+                    Seq.fill(this.outputChannals.size)(Empty())
 
                 case Break() =>
-                    outputChannals
-                        .foreach(_.foreach(_.push(Break(), id)))
+                    Seq.fill(this.outputChannals.size)(Break())
             }
+
+            (outputChannals zip outputs)
+                .foreach(
+                    {
+                        case (channelIn, output) =>
+                            channelIn.foreach(_.push(output, id))
+                    }
+                )
         }
     }
 }
@@ -199,27 +229,16 @@ final case class HSplitterRunnable[H, T <: HList, L <: HList]
 
                     (Value(head), Value(tail))
 
-//                    hOutputChans.foreach(_.push(Value(head), id))
-//                    tOutputChans.foreach(_.push(Value(tail), id))
-
                 case Finish() =>
                     running = false
                     (Finish(), Finish())
 
-//                    hOutputChans.foreach(_.push(Finish()))
-//                    tOutputChans.foreach(_.push(Finish()))
-
                 case Break() =>
                     (Break(), Break())
-
-//                    hOutputChans.foreach(_.push(Break()))
-//                    tOutputChans.foreach(_.push(Break()))
 
                 case Empty() =>
                     (Empty(), Empty())
 
-//                    hOutputChans.foreach(_.push(Empty()))
-//                    tOutputChans.foreach(_.push(Empty()))
             }
 
             hOutputChans.foreach(_.push(hOutput, id))
@@ -248,20 +267,16 @@ final case class HJoinerRunnable[H, T <: HList, L <: HList]
                     val output = l(input)
 
                     Value(output)
-//                    outputChans.foreach(_.push(Value(output)))
 
                 case (Finish(), _) | (_, Finish()) =>
-//                    outputChans.foreach(_.push(Finish()))
                     running = false
                     Finish()
 
                 case (Break(), _) | (_, Break()) =>
                     Break()
-//                    outputChans.foreach(_.push(Break()))
 
                 case (Empty(), _) | (_, Empty()) =>
                     Empty()
-//                    outputChans.foreach(_.push(Break()))
             }
 
             outputChans.foreach(_.push(msg, id))

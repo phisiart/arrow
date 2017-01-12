@@ -38,7 +38,7 @@ object RecordReplayTest {
 
             s |> f |> g
 
-            val ret = record(g).get()
+            val ret = RECORD(g).get()
             ret._2
         }
 
@@ -54,10 +54,33 @@ object RecordReplayTest {
 
             val iter = myRecord.toIterator.buffered
 
-            val ret = record(g, replay = Some(iter)).get()
+            val ret = RECORD(g, replay = Some(iter)).get()
             ret._2
         }
 
         (myRecord zip myRecord2).foreach(println)
     }
+
+//    def StupidImplicitTest(): Unit = {
+//        class Transform[From, To]
+//
+//        class A
+//        class B
+//        class C
+//
+//        def TestTransform[T1, T2, T3](t1: T1)(implicit t1_t2: Transform[T1, T2], t2_t3: Transform[T2, T3]) = {
+//            t1
+//        }
+//
+//        def TestTransform2[T1, T2, T3](t1: T1)(implicit t2_t3: Transform[T2, T3], t1_t2: Transform[T1, T2]) = {
+//            t1
+//        }
+//
+//        implicit val a2b = new Transform[A, B]
+//        implicit val b2c = new Transform[B, C]
+//
+//        TestTransform(new A)
+//        TestTransform2(new A)
+//    }
 }
+
