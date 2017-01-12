@@ -6,16 +6,14 @@ Constructing Dataflow Graphs with Function Composition Style
 
 Arrow is a domain-specific language enabling users to create dataflow graphs easily in a declarative way.
 
-## Roadmap
-
-Arrow is being reconstructed and open-sourced. The following features are to be (re)implemented.
+## Features
 
 - [x] Type Checking
 - [x] Graph Constructing
 - [x] Graph Drawing
 - [x] Concurrent Runtime
 - [x] Record/Replay
-- [ ] Distributed Execution Support
+- [x] Distributed Execution Support
 
 ## Complete Example
 ```scala
